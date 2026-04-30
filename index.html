@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
-<title>Auto EOL Maintenance & PM Scheduler</title>
+<title> Auto EOL Maintenance & PM Scheduler</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -225,6 +225,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
 .lbc{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:38px;height:38px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .pm-form-input{background:var(--sur2);border:1px solid var(--bor);border-radius:10px;padding:11px 14px;color:var(--tx);font-size:14px;width:100%;font-family:'Barlow',sans-serif;}
 .pm-form-input:focus{outline:none;border-color:var(--pm-acc);}
+.alpha-btn{background:transparent;border:1px solid var(--bd);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--tx2);cursor:pointer;transition:all .15s;font-family:inherit;}
+.alpha-btn.active{background:var(--acc);border-color:var(--acc);color:#fff;}
+.alpha-btn:hover:not(.active){border-color:var(--acc);color:var(--acc);}
 .pm-form-label{color:var(--tx2);font-size:11px;font-weight:700;letter-spacing:1px;display:block;margin-bottom:6px;text-transform:uppercase;}
 /* PM sync info banner */
 .pm-sync-info{background:rgba(255,149,0,.07);border:1px solid rgba(255,149,0,.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--tx2);display:flex;align-items:center;gap:8px;}
@@ -372,10 +375,15 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
           <div><div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);margin-bottom:2px;">Department</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;color:var(--acc);" id="formDeptLabel">—</div></div>
           <button class="btn btn-ghost btn-sm" onclick="backToModule()">🔀 Switch</button>
         </div>
-        <div class="fg"><label>Equipment / ID *</label><select id="fEquip"><option value="">— Select —</option></select></div>
+        <div class="fg"><label>Equipment / ID *</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;" id="fEquipAlpha">
+            <button type="button" class="alpha-btn active" data-letter="all" onclick="filterEquipAlpha('all')">All</button>
+          </div>
+          <select id="fEquip"><option value="">— Select —</option></select>
+        </div>
         <div class="fg" id="pressWrap" style="display:none;"><label>Press * <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--tx2);font-size:11px;">select one or more (max 4)</span></label><div class="press-grid" id="pressGrid"></div></div>
         <div class="fg" id="halfWrap" style="display:none;"><label>Section *</label><div class="half-row"><div class="half-btn" id="halfTop" onclick="pickHalf('top')">⬆ Top</div><div class="half-btn" id="halfBottom" onclick="pickHalf('bottom')">⬇ Bottom</div><div class="half-btn" id="halfBoth" onclick="pickHalf('both')">↕ Both</div></div></div>
-        <div class="fg"><label>PM Activity *</label><div class="act-row" id="actRow"><div class="act-btn" id="actAssemble" onclick="pickActivity('assemble')">🔩 Assemble</div><div class="act-btn" id="actDismantle" onclick="pickActivity('dismantle')">🔧 Dismantle</div><div class="act-btn" id="actChangePart" onclick="pickActivity('changepart')">🔄 Change Part</div></div></div>
+        <div class="fg"><label>PM Activity * <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--tx2);font-size:11px;">select one or more</span></label><div class="act-row" id="actRow"><div class="act-btn" id="actAssemble" onclick="toggleActivity('assemble')">🔩 Assemble</div><div class="act-btn" id="actDismantle" onclick="toggleActivity('dismantle')">🔧 Dismantle</div><div class="act-btn" id="actChangePart" onclick="toggleActivity('changepart')">🔄 Change Part</div></div></div>
         <div class="form-row">
           <div class="fg"><label>Person In Charge *</label><select id="fPIC"><option value="">— Select —</option></select></div>
           <div class="fg"><label>Maintenance Type *</label><select id="fType"><option value="">— Select —</option></select></div>
@@ -665,7 +673,7 @@ let recs=[],pics=[],types=[],departments=[];
 let pmMolds=[],pmHistory=[],pmUsers=[];
 let photoQueue=[],delId=null,cbN=0;
 let selectedHalf=null,editSelectedHalf=null;
-let selectedActivity=null,editSelectedActivity=null;
+let selectedActivity=[],editSelectedActivity=[];
 let selectedPresses=[],editSelectedPresses=[];
 let dashActiveFilter={},dashOpenState={},manageOpenState={};
 let pmAddWeekState=[],pmEditWeekState=[];
@@ -994,7 +1002,7 @@ function doLogout(){
   role=null;sRole=null;recs=[];pics=[];types=[];departments=[];photoQueue=[];
   pmMolds=[];pmHistory=[];pmUsers=[];curDept=null;currentModule=null;currentSchedType=null;
   rptSelectedEquip=new Set();rptSelectedSections=new Set(['all']);rptSelectedActivities=new Set(['all']);
-  selectedActivity=null;editSelectedActivity=null;
+  selectedActivity=[];editSelectedActivity=[];
   ['aUser','aPass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('loginErr').style.display='none';
   document.getElementById('adminFields').style.display='none';
@@ -1218,10 +1226,40 @@ function toggleManage(key){manageOpenState[key]=!manageOpenState[key];const body
 function fillNewForm(){
   const dept=role==='user'?curDept:(curDept||departments[0]);
   document.getElementById('formDeptLabel').textContent=dept?deptIcon(dept.name)+' '+dept.name:'—';
-  const eEl=document.getElementById('fEquip');eEl.innerHTML='<option value="">— Select equipment —</option>'+(dept?dept.equipment.map(e=>`<option value="${esc(eqId(e))}">${esc(eqId(e))}</option>`).join(''):'');
-  eEl.onchange=()=>onEquipChange(dept);mkSelPIC('fPIC','— Select PIC —',pics);mkSel('fType','— Select type —',types);
+  // Build sorted equipment list and alpha filter
+  const allEquip=dept?dept.equipment.map(e=>eqId(e)).filter(Boolean).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})):[];
+  window._fEquipAll=allEquip;
+  window._fEquipDept=dept;
+  buildEquipAlpha(allEquip);
+  filterEquipAlpha('all');
+  const eEl=document.getElementById('fEquip');
+  eEl.onchange=()=>onEquipChange(dept);
+  mkSelPIC('fPIC','— Select PIC —',pics);mkSel('fType','— Select type —',types);
   renderChips('partsGrid',dept?dept.parts:[],[]);
   showHalfSel(!!(dept&&dept.name.toLowerCase()==='mold die'));if(!deptHasPresses(dept))showPressSel([]);
+}
+function buildEquipAlpha(equip){
+  const letters=[...new Set(equip.map(e=>e[0]?.toUpperCase()).filter(Boolean))].sort();
+  const bar=document.getElementById('fEquipAlpha');
+  if(!bar)return;
+  let h='<button type="button" class="alpha-btn active" data-letter="all" onclick="filterEquipAlpha(&quot;all&quot;)">All</button>';
+  letters.forEach(l=>{h+='<button type="button" class="alpha-btn" data-letter="'+l+'" onclick="filterEquipAlpha(&quot;'+l+'&quot;)">'+l+'</button>';});
+  bar.innerHTML=h;
+}
+
+function filterEquipAlpha(letter){
+  // Update active button
+  document.querySelectorAll('#fEquipAlpha .alpha-btn').forEach(b=>{
+    b.classList.toggle('active',b.dataset.letter===letter);
+  });
+  const equip=window._fEquipAll||[];
+  const dept=window._fEquipDept;
+  const filtered=letter==='all'?equip:equip.filter(e=>e[0]?.toUpperCase()===letter);
+  const eEl=document.getElementById('fEquip');
+  const prev=eEl.value;
+  eEl.innerHTML='<option value="">— Select equipment —</option>'+filtered.map(e=>`<option value="${esc(e)}">${esc(e)}</option>`).join('');
+  if(prev&&filtered.includes(prev))eEl.value=prev;
+  eEl.onchange=()=>onEquipChange(dept);
 }
 function eqId(e){return typeof e==='string'?e:e.id||'';}
 function eqPresses(e){return typeof e==='object'&&e.presses?e.presses:[];}
@@ -1238,17 +1276,22 @@ function pickHalf(h){selectedHalf=h;['halfTop','halfBottom','halfBoth'].forEach(
 function showEditHalfSel(show,current){const wrap=document.getElementById('eHalfWrap');if(wrap)wrap.style.display=show?'':'none';if(show&&current){editSelectedHalf=current;['eHalfTop','eHalfBottom','eHalfBoth'].forEach(id=>document.getElementById(id)?.classList.remove('active'));const m={top:'eHalfTop',bottom:'eHalfBottom',both:'eHalfBoth'};document.getElementById(m[current])?.classList.add('active');}else if(!show)editSelectedHalf=null;}
 function pickEditHalf(h){editSelectedHalf=h;['eHalfTop','eHalfBottom','eHalfBoth'].forEach(id=>document.getElementById(id)?.classList.remove('active'));const m={top:'eHalfTop',bottom:'eHalfBottom',both:'eHalfBoth'};document.getElementById(m[h])?.classList.add('active');}
 const ACT_LABELS={assemble:'🔩 Assemble',dismantle:'🔧 Dismantle',changepart:'🔄 Change Part'};
-function pickActivity(a){selectedActivity=a;['actAssemble','actDismantle','actChangePart'].forEach(id=>document.getElementById(id)?.classList.remove('active'));const m={assemble:'actAssemble',dismantle:'actDismantle',changepart:'actChangePart'};document.getElementById(m[a])?.classList.add('active');}
+function toggleActivity(a){
+  const m={assemble:'actAssemble',dismantle:'actDismantle',changepart:'actChangePart'};
+  const btn=document.getElementById(m[a]);
+  if(!btn)return;
+  btn.classList.toggle('active');
+  // selectedActivity is now an array
+  if(!Array.isArray(selectedActivity))selectedActivity=[];
+  if(btn.classList.contains('active')){
+    if(!selectedActivity.includes(a))selectedActivity.push(a);
+  }else{
+    selectedActivity=selectedActivity.filter(x=>x!==a);
+  }
+}
+function pickActivity(a){toggleActivity(a);}
 function pickEditActivity(a){editSelectedActivity=a;['eActAssemble','eActDismantle','eActChangePart'].forEach(id=>document.getElementById(id)?.classList.remove('active'));const m={assemble:'eActAssemble',dismantle:'eActDismantle',changepart:'eActChangePart'};document.getElementById(m[a])?.classList.add('active');}
-function resetActivity(){selectedActivity=null;['actAssemble','actDismantle','actChangePart'].forEach(id=>document.getElementById(id)?.classList.remove('active'));}
-function showEditPressSel(presses,selectedArr){const wrap=document.getElementById('ePressWrap'),grid=document.getElementById('ePressGrid');if(!wrap||!grid)return;if(!presses||!presses.length){wrap.style.display='none';editSelectedPresses=[];return;}wrap.style.display='';grid.innerHTML=presses.map(p=>`<div class="press-btn${selectedArr&&selectedArr.includes(p)?' sel':''}" data-press="${esc(p)}" onclick="toggleEditPress(this)">${esc(p)}</div>`).join('');editSelectedPresses=selectedArr||[];}
-function toggleEditPress(btn){const sel=[...document.querySelectorAll('#ePressGrid .press-btn.sel')];if(btn.classList.contains('sel')){btn.classList.remove('sel');editSelectedPresses=sel.filter(b=>b!==btn).map(b=>b.dataset.press);}else if(sel.length>=4){toast('⚠️ Max 4 presses.');return;}else{btn.classList.add('sel');editSelectedPresses=[...sel,btn].map(b=>b.dataset.press);}}
-
-/* ══════════════════════════════════════════
-   PHOTOS
-══════════════════════════════════════════ */
-function resetPhotos(){photoQueue=[];document.getElementById('photoGrid').innerHTML='';document.getElementById('upinfo').textContent='';document.getElementById('photoInput').value='';}
-function onPhotoPick(e){const remaining=MAX_PHOTOS-photoQueue.filter(p=>p&&p.state!=='removed').length;const files=[...e.target.files].slice(0,remaining);if(files.length<[...e.target.files].length)toast(`⚠️ Max ${MAX_PHOTOS} photos.`);files.forEach(file=>{if(!file.type.startsWith('image/')){toast('⚠️ Images only.');return;}const idx=photoQueue.length;const entry={idx,file,dataUrl:null,state:'reading'};photoQueue.push(entry);const div=document.createElement('div');div.className='pi';div.id='pi-'+idx;div.innerHTML='<div class="ov"><div class="pi-sp"></div></div>';document.getElementById('photoGrid').appendChild(div);const reader=new FileReader();reader.onload=ev=>{entry.dataUrl=ev.target.result;entry.state='pending';div.innerHTML=`<img src="${ev.target.result}"><button class="pi-rm" onclick="removePhoto(${idx})">✕</button>`;};reader.readAsDataURL(file);});e.target.value='';}
+function resetActivity(){selectedActivity=[];['actAssemble','actDismantle','actChangePart'].forEach(id=>document.getElementById(id)?.classList.remove('active'));}
 function removePhoto(idx){const e=photoQueue.find(p=>p&&p.idx===idx);if(e)e.state='removed';document.getElementById('pi-'+idx)?.remove();}
 function compressImage(dataUrl,maxPx,q){return new Promise(res=>{const img=new Image();img.onload=()=>{let w=img.width,h=img.height;if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);res(c.toDataURL('image/jpeg',q));};img.src=dataUrl;});}
 async function uploadPhotoImgBB(entry){const compressed=await compressImage(entry.dataUrl,IMG_MAX_PX,IMG_Q);const form=new FormData();form.append('key',IMGBB_KEY);form.append('image',compressed.split(',')[1]);form.append('name','PM_'+Date.now()+'_'+entry.idx);const resp=await fetch('https://api.imgbb.com/1/upload',{method:'POST',body:form});if(!resp.ok)throw new Error('ImgBB HTTP '+resp.status);const data=await resp.json();if(!data.success)throw new Error('ImgBB: '+(data.error?.message||'failed'));return{thumbUrl:data.data.thumb?.url||data.data.display_url,viewUrl:data.data.url_viewer||data.data.url,deleteUrl:data.data.delete_url||''};}
@@ -1264,7 +1307,7 @@ async function submitPM(){
   const parts=getSelChips('partsGrid');const eEl=document.getElementById('formErr');
   const hasPressesFlag=deptHasPresses(dept);if(hasPressesFlag&&!selectedPresses.length){eEl.textContent='⚠️ Please select at least one press.';eEl.style.display='block';return;}
   const needsHalf=!!(dept&&dept.name.toLowerCase()==='mold die');if(needsHalf&&!selectedHalf){eEl.textContent='⚠️ Please select Top, Bottom or Both.';eEl.style.display='block';return;}
-  if(!selectedActivity){eEl.textContent='⚠️ Please select a PM Activity (Assemble / Dismantle / Change Part).';eEl.style.display='block';return;}
+  if(!selectedActivity||!selectedActivity.length){eEl.textContent='⚠️ Please select at least one PM Activity.';eEl.style.display='block';return;}
   const hLbl=selectedHalf?selectedHalf.charAt(0).toUpperCase()+selectedHalf.slice(1):'';const fullEquip=needsHalf&&hLbl?equip+' ('+hLbl+')':equip;
   if(!equip||!pic||!mtype||!ds||!det){eEl.textContent='⚠️ Fill in all required fields.';eEl.style.display='block';return;}
   if(!parts.length){eEl.textContent='⚠️ Select at least one part (use "NA" if nothing changed).';eEl.style.display='block';return;}
@@ -1272,7 +1315,7 @@ async function submitPM(){
   const btn=document.getElementById('subBtn');btn.disabled=true;btn.textContent='⏳ Saving...';sy('sync');
   try{
     const uploaded=await uploadAllPhotos();const pressesVal=hasPressesFlag?selectedPresses.join(', '):'';
-    const r=await jsonp({action:'addRecord',pic,dept:dept.name,equipment:fullEquip,maintenanceType:mtype,presses:pressesVal,pmActivity:selectedActivity||'',dateStart:ds,dateFinish:df||'',details:det,parts:parts.join(', '),photos:JSON.stringify(uploaded)});
+    const r=await jsonp({action:'addRecord',pic,dept:dept.name,equipment:fullEquip,maintenanceType:mtype,presses:pressesVal,pmActivity:Array.isArray(selectedActivity)?selectedActivity.join(', '):(selectedActivity||''),dateStart:ds,dateFinish:df||'',details:det,parts:parts.join(', '),photos:JSON.stringify(uploaded)});
     if(r.status==='ok'){recs.unshift(r.record);['fEquip','fPIC','fType','fDs','fDf','fDet'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('#partsGrid .chip.sel').forEach(c=>c.classList.remove('sel'));showHalfSel(false);showPressSel([]);resetActivity();resetPhotos();sy('ok');toast('✅ PM Record saved!');goSec('recs');pmAutoSyncFromRecord(r.record);}
     else throw new Error(r.message||'Save failed');
   }catch(e){sy('off');toast('❌ '+e.message);}
