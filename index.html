@@ -1,3 +1,118 @@
+/* ══════════════════════════════════════════
+   FISCAL CALENDAR — AUTO-GENERATED PER FY
+   Fiscal year = first Sunday of NOV (prev year) through last Saturday 52 weeks later.
+   Thursday is the mid-week anchor for labelling each week's month/quarter.
+══════════════════════════════════════════ */
+
+const MONTH_NAMES=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const PERIOD_MAP={NOV:'P1',DEC:'P2',JAN:'P3',FEB:'P4',MAR:'P5',APR:'P6',MAY:'P7',JUN:'P8',JUL:'P9',AUG:'P10',SEP:'P11',OCT:'P12'};
+const QUARTER_MAP={NOV:'1Q',DEC:'1Q',JAN:'1Q',FEB:'2Q',MAR:'2Q',APR:'2Q',MAY:'3Q',JUN:'3Q',JUL:'3Q',AUG:'4Q',SEP:'4Q',OCT:'4Q'};
+const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+
+/** First Sunday of November in (fyFullYear - 1). */
+function fyFirstSunday(fyFullYear){
+  const d=new Date(fyFullYear-1,10,1);
+  while(d.getDay()!==0)d.setDate(d.getDate()+1);
+  return d;
+}
+
+/** Build a 52-week fiscal calendar for fyFullYear (e.g. 2026). */
+function buildFiscalCalendar(fyFullYear){
+  const fy2=fyFullYear%100;
+  const wkPrefix=(fy2-20)*100; // FY26→600, FY27→700 …
+  const start=fyFirstSunday(fyFullYear);
+  const DAY=86400000;
+  const weeks=[];
+  for(let wkNum=1;wkNum<=52;wkNum++){
+    const sunMs=start.getTime()+(wkNum-1)*7*DAY;
+    const sun=new Date(sunMs);
+    const thu=new Date(sunMs+4*DAY);
+    const sat=new Date(sunMs+6*DAY);
+    const mthName=MONTH_NAMES[thu.getMonth()];
+    weeks.push({
+      wk:wkPrefix+wkNum, wkNum, fyFull:fyFullYear, fy2,
+      qtr:QUARTER_MAP[mthName]+fy2, mth:mthName, period:PERIOD_MAP[mthName],
+      sun:sun.getDate(), mon:new Date(sunMs+DAY).getDate(),
+      tue:new Date(sunMs+2*DAY).getDate(), wed:new Date(sunMs+3*DAY).getDate(),
+      thu:thu.getDate(), fri:new Date(sunMs+5*DAY).getDate(), sat:sat.getDate(),
+      _sunDate:sun, _satDate:sat
+    });
+  }
+  return weeks;
+}
+
+/** Detect which FY today (MYT) belongs to. */
+function detectActiveFY(){
+  const now=new Date();
+  const myt=new Date(now.getTime()+(8*60*60*1000));
+  const today=new Date(myt.getUTCFullYear(),myt.getUTCMonth(),myt.getUTCDate());
+  for(let fy=today.getFullYear()-1;fy<=today.getFullYear()+1;fy++){
+    const s=fyFirstSunday(fy);
+    const e=new Date(s.getTime()+52*7*86400000-1);
+    if(today>=s&&today<=e)return fy;
+  }
+  return today.getFullYear();
+}
+
+const _calCache={};
+function getCalendar(fyFullYear){
+  if(!_calCache[fyFullYear])_calCache[fyFullYear]=buildFiscalCalendar(fyFullYear);
+  return _calCache[fyFullYear];
+}
+
+/* Active FY — auto-detected; user can switch via FY picker in PM Calendar. */
+let ACTIVE_FY_FULL=detectActiveFY();
+let ACTIVE_FY2=ACTIVE_FY_FULL%100;
+let CALENDAR=getCalendar(ACTIVE_FY_FULL);
+
+function switchFY(fyFullYear){
+  ACTIVE_FY_FULL=fyFullYear;
+  ACTIVE_FY2=fyFullYear%100;
+  CALENDAR=getCalendar(fyFullYear);
+  CURRENT_WK=detectCurrentWeek();
+  pmActiveQtr=CALENDAR[0].qtr;
+  const lbl=document.getElementById('pm-fy-label');
+  if(lbl)lbl.textContent='FY'+fyFullYear;
+  renderPMCalendar();
+}
+
+/* ══════════════════════════════════════════
+   FISCAL WEEK DATE RESOLUTION
+══════════════════════════════════════════ */
+
+function resolveWeekBounds(w){
+  const sunD=w._sunDate,satD=w._satDate;
+  return{
+    sunYr:sunD.getFullYear(),sunMo:sunD.getMonth(),sunD:sunD.getDate(),
+    satYr:satD.getFullYear(),satMo:satD.getMonth(),satD:satD.getDate()
+  };
+}
+
+function dateInWeek(y,m,d,w){
+  const b=resolveWeekBounds(w);
+  const afterSun=(y>b.sunYr)||(y===b.sunYr&&m>b.sunMo)||(y===b.sunYr&&m===b.sunMo&&d>=b.sunD);
+  const beforeSat=(y<b.satYr)||(y===b.satYr&&m<b.satMo)||(y===b.satYr&&m===b.satMo&&d<=b.satD);
+  return afterSun&&beforeSat;
+}
+
+function detectCurrentWeek(){
+  const now=new Date();
+  const myt=new Date(now.getTime()+(8*60*60*1000));
+  const y=myt.getUTCFullYear(),m=myt.getUTCMonth(),d=myt.getUTCDate();
+  for(const w of CALENDAR){if(dateInWeek(y,m,d,w))return w.wk;}
+  return CALENDAR[CALENDAR.length-1].wk;
+}
+
+function dateToFiscalWeek(dateStr){
+  if(!dateStr)return null;
+  const parts=dateStr.split('-');
+  if(parts.length<3)return null;
+  const y=parseInt(parts[0]),m=parseInt(parts[1])-1,d=parseInt(parts[2]);
+  for(const w of CALENDAR){if(dateInWeek(y,m,d,w))return w.wk;}
+  return null;
+}
+
+let CURRENT_WK=detectCurrentWeek();
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -211,7 +326,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
 .rpt-table tr:last-child td{border-bottom:none;}
 .rpt-table tr:hover td{background:var(--sur2);}
 .rpt-dept-chips{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 4px;}
-.rpt-dept-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;background:var(--sur2);border:1.5px solid var(--bor);border-radius:20px;cursor:pointer;transition:all .15s;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tx2);user-select:none;white-space:nowrap;}
+.rpt-dept-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;background:var(--sur2);border:1.5px solid var(--bor);border-radius:20px;cursor:pointer;transition:all .15px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tx2);user-select:none;white-space:nowrap;}
 .rpt-dept-chip.active{background:rgba(240,165,0,.14);border-color:var(--acc);color:var(--acc);}
 .rpt-freq-scroll{max-height:246px;overflow-y:auto;}
 .lover{display:none;position:fixed;inset:0;background:rgba(13,17,23,.92);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
@@ -236,13 +351,11 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
 .pm-tab-btn.active{color:var(--pm-acc);}
 
 /* ── REPORT ENHANCEMENTS ── */
-/* Multi-select equipment chips */
 .rpt-equip-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;}
 .rpt-equip-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--sur2);border:1.5px solid var(--bor);border-radius:20px;cursor:pointer;transition:all .15s;font-size:12px;font-weight:600;color:var(--tx2);user-select:none;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;}
 .rpt-equip-chip:hover{border-color:rgba(240,165,0,.4);color:var(--tx);}
 .rpt-equip-chip.sel{background:rgba(240,165,0,.12);border-color:var(--acc);color:var(--acc);}
 .rpt-equip-chip.sel::before{content:'✓ ';font-size:10px;}
-/* Section filter pills */
 .section-filter-wrap{display:flex;gap:7px;flex-wrap:wrap;padding:4px 0;}
 .section-pill{padding:7px 16px;border-radius:20px;border:1.5px solid var(--bor);cursor:pointer;font-size:13px;font-weight:700;background:var(--sur2);color:var(--tx2);transition:all .15s;user-select:none;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px;display:inline-flex;align-items:center;gap:5px;}
 .section-pill:hover{border-color:rgba(240,165,0,.4);color:var(--tx);}
@@ -251,14 +364,11 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
 .section-pill.sel-bottom{border-color:#8b5cf6;color:#a78bfa;background:rgba(139,92,246,.1);}
 .section-pill.sel-both{border-color:var(--acc);color:var(--acc);background:rgba(240,165,0,.1);}
 .section-pill.sel-all{border-color:var(--tx2);color:var(--tx);background:var(--sur2);}
-/* Selected count badge on equipment filter */
 .equip-sel-count{font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--acc);color:#000;margin-left:4px;}
-/* Report active filters summary */
 .active-filters-bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px;align-items:center;}
 .af-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:rgba(240,165,0,.1);border:1px solid rgba(240,165,0,.25);border-radius:12px;font-size:11px;font-weight:700;color:var(--acc);}
 .af-tag button{background:none;border:none;color:var(--acc);cursor:pointer;font-size:12px;padding:0;line-height:1;opacity:.7;}
 .af-tag button:hover{opacity:1;}
-/* Section badge in history table */
 .section-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
 .sb-top{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);}
 .sb-bottom{background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);}
@@ -412,39 +522,21 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
       <div class="rlist" id="recList"></div>
     </div>
 
-    <!-- ══ REPORT SECTION — ENHANCED ══ -->
+    <!-- ══ REPORT SECTION ══ -->
     <div class="sec" id="sec-report">
       <div class="sec-hdr"><div class="sec-t">Service <span>Report</span></div><button class="btn btn-blue btn-sm" onclick="window.print()">🖨️ Print</button></div>
       <div class="block" id="reportFilters">
         <h3>🔍 Filter Report</h3>
-
-        <!-- Row 1: Dept + Dates -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-          <div class="fg" style="margin:0;">
-            <label>Department</label>
-            <select id="rFdept" onchange="onRptDeptChange()"><option value="">All Departments</option></select>
-          </div>
+          <div class="fg" style="margin:0;"><label>Department</label><select id="rFdept" onchange="onRptDeptChange()"><option value="">All Departments</option></select></div>
           <div class="fg" style="margin:0;"><label>Date From</label><input type="date" id="rFfrom" onchange="renderReport()"></div>
           <div class="fg" style="margin:0;"><label>Date To</label><input type="date" id="rFto" onchange="renderReport()"></div>
         </div>
-
-        <!-- Row 2: PIC + Type + Status -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
-          <div class="fg" style="margin:0;">
-            <label>Person In Charge</label>
-            <select id="rFpic" onchange="renderReport()"><option value="">All PIC</option></select>
-          </div>
-          <div class="fg" style="margin:0;">
-            <label>Maint. Type</label>
-            <select id="rFmtype" onchange="renderReport()"><option value="">All Types</option></select>
-          </div>
-          <div class="fg" style="margin:0;">
-            <label>Status</label>
-            <select id="rFstat" onchange="renderReport()"><option value="">All Status</option><option value="completed">Completed</option><option value="in_progress">In Progress</option></select>
-          </div>
+          <div class="fg" style="margin:0;"><label>Person In Charge</label><select id="rFpic" onchange="renderReport()"><option value="">All PIC</option></select></div>
+          <div class="fg" style="margin:0;"><label>Maint. Type</label><select id="rFmtype" onchange="renderReport()"><option value="">All Types</option></select></div>
+          <div class="fg" style="margin:0;"><label>Status</label><select id="rFstat" onchange="renderReport()"><option value="">All Status</option><option value="completed">Completed</option><option value="in_progress">In Progress</option></select></div>
         </div>
-
-        <!-- Section Filter (Top / Bottom / Both) -->
         <div style="margin-bottom:14px;">
           <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);margin-bottom:8px;">Section Filter</div>
           <div class="section-filter-wrap" id="sectionFilterWrap">
@@ -454,26 +546,27 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
             <div class="section-pill" data-section="both" onclick="toggleSectionPill(this)">↕ Both</div>
             <div class="section-pill" data-section="none" onclick="toggleSectionPill(this)">🔲 No Section</div>
           </div>
-          <div style="font-size:11px;color:var(--tx2);margin-top:6px;line-height:1.5;">Applies to equipment logged as Top/Bottom/Both (Mold Die section field). Multiple selections allowed.</div>
         </div>
-
-        <!-- Equipment Multi-select -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);margin-bottom:8px;">PM Activity</div>
+          <div class="section-filter-wrap" id="activityFilterWrap">
+            <div class="section-pill sel-all" data-activity="all" onclick="toggleActivityPill(this)">📋 All Activities</div>
+            <div class="section-pill" data-activity="assemble" onclick="toggleActivityPill(this)">🔩 Assemble</div>
+            <div class="section-pill" data-activity="dismantle" onclick="toggleActivityPill(this)">🔧 Dismantle</div>
+            <div class="section-pill" data-activity="changepart" onclick="toggleActivityPill(this)">🔄 Change Part</div>
+            <div class="section-pill" data-activity="none" onclick="toggleActivityPill(this)">🔲 Not Set</div>
+          </div>
+        </div>
         <div style="margin-bottom:10px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
-            <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);">
-              Equipment
-              <span id="equipSelCount" class="equip-sel-count" style="display:none;">0</span>
-            </div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);">Equipment<span id="equipSelCount" class="equip-sel-count" style="display:none;">0</span></div>
             <div style="display:flex;gap:6px;">
               <button onclick="selectAllEquip()" style="background:transparent;border:1px solid var(--bor);border-radius:6px;padding:3px 9px;color:var(--tx2);cursor:pointer;font-size:11px;font-weight:600;">All</button>
               <button onclick="clearEquip()" style="background:transparent;border:1px solid var(--bor);border-radius:6px;padding:3px 9px;color:var(--tx2);cursor:pointer;font-size:11px;font-weight:600;">None</button>
             </div>
           </div>
-          <div class="rpt-equip-chips" id="rptEquipChips">
-            <span style="color:var(--tx2);font-size:12px;">Select a department first, or all equipment shown below.</span>
-          </div>
+          <div class="rpt-equip-chips" id="rptEquipChips"><span style="color:var(--tx2);font-size:12px;">Select a department first, or all equipment shown below.</span></div>
         </div>
-
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--bor);">
           <button class="btn btn-ghost btn-sm" onclick="clearRptFilters()">✕ Clear All</button>
           <div id="rptActiveFilters" class="active-filters-bar" style="flex:1;"></div>
@@ -516,7 +609,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
       <div id="pm-molds-list" style="display:grid;gap:8px;"></div>
     </div>
     <div class="sec" id="sec-pm-calendar">
-      <div class="sec-hdr"><div class="sec-t">PM <span class="pm">Calendar</span> — FY2026</div></div>
+      <div class="sec-hdr"><div class="sec-t">PM <span class="pm">Calendar</span> — <span id="pm-fy-label">FY2026</span></div></div>
+      <div id="pm-fy-picker" style="margin-bottom:8px;"></div>
+      <div id="pm-fy-picker" style="margin-bottom:8px;"></div>
       <div id="pm-qtr-tabs" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;"></div>
       <div id="pm-calendar-content"></div>
     </div>
@@ -688,14 +783,15 @@ let selectedActivity=null,editSelectedActivity=null;
 let selectedPresses=[],editSelectedPresses=[];
 let dashActiveFilter={},dashOpenState={},manageOpenState={};
 let pmAddWeekState=[],pmEditWeekState=[];
-let pmActiveFilter='all',pmActiveQtr='',pmDoneMoldId=null;
+let pmActiveFilter='all',pmActiveQtr=CALENDAR[0].qtr,pmDoneMoldId=null;
 let pmActiveSec='pm-dashboard';
 let rptFreqDept='',rptHistDept='';
 let pmIsSaving=false;
 
 /* ── REPORT FILTER STATE ── */
-let rptSelectedEquip=new Set(); // multi-select equipment
-let rptSelectedSections=new Set(['all']); // section filter
+let rptSelectedEquip=new Set();
+let rptSelectedSections=new Set(['all']);
+let rptSelectedActivities=new Set(['all']);
 
 /* ══════════════════════════════════════════
    PM SCHEDULER TYPES
@@ -779,54 +875,91 @@ const CALENDAR=[
   {wk:652,wkNum:52,qtr:"4Q26",mth:"OCT",period:"P12",sun:25,mon:26,tue:27,wed:28,thu:29,fri:30,sat:31},
 ];
 
+/* ══════════════════════════════════════════
+   FISCAL WEEK DATE RESOLUTION
+   ─────────────────────────────────────────
+   The calendar stores day-of-month numbers
+   for each weekday. The key insight:
+
+   For weeks where sun > sat (e.g. WK622
+   sun=29, sat=4), the Sunday belongs to
+   the PREVIOUS month and Saturday belongs
+   to the LABELLED month (mth).
+
+   For weeks where sun <= sat, all days
+   are within the LABELLED month.
+
+   We resolve actual calendar dates by:
+     • If sun <= sat  → sunMth = mth, satMth = mth
+     • If sun >  sat  → sunMth = mth - 1, satMth = mth
+
+   FY2026 fiscal year: NOV/DEC are 2025,
+   everything else is 2026.
+══════════════════════════════════════════ */
+
+const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+function calBaseYear(mth){return(mth==='NOV'||mth==='DEC')?2025:2026;}
+
+/**
+ * Resolve the actual [year, month(0-indexed), day] for Sunday and Saturday
+ * of a calendar week entry.
+ */
+function resolveWeekBounds(w){
+  const baseMo=MI[w.mth];
+  const baseYr=calBaseYear(w.mth);
+  let sunMo=baseMo,sunYr=baseYr,satMo=baseMo,satYr=baseYr;
+  if(w.sun>w.sat){
+    // Week crosses a month boundary. thu tells which side overflows:
+    //   thu < 8  => sun/mon/tue are in PREV month (sun-overflow, e.g. WK622 MAR29-APR4 thu=2)
+    //   thu >= 8 => fri/sat spill into NEXT month (sat-overflow, e.g. WK626 APR26-MAY2 thu=30)
+    if(w.thu<8){
+      sunMo=baseMo-1;
+      if(sunMo<0){sunMo=11;sunYr=baseYr-1;}
+    }else{
+      satMo=baseMo+1;
+      if(satMo>11){satMo=0;satYr=baseYr+1;}
+    }
+  }
+  return{sunYr,sunMo,sunD:w.sun,satYr,satMo,satD:w.sat};
+}
+
+/**
+ * Check if a given date (y,m,d) falls on or after Sun and on or before Sat.
+ */
+function dateInWeek(y,m,d,w){
+  const b=resolveWeekBounds(w);
+  const afterSun=(y>b.sunYr)||(y===b.sunYr&&m>b.sunMo)||(y===b.sunYr&&m===b.sunMo&&d>=b.sunD);
+  const beforeSat=(y<b.satYr)||(y===b.satYr&&m<b.satMo)||(y===b.satYr&&m===b.satMo&&d<=b.satD);
+  return afterSun&&beforeSat;
+}
+
 function detectCurrentWeek(){
   // Use Malaysia time (UTC+8)
   const now=new Date();
   const myt=new Date(now.getTime()+(8*60*60*1000));
-  const todayY=myt.getUTCFullYear(),todayM=myt.getUTCMonth(),todayD=myt.getUTCDate();
-  const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
-  // FY2026: NOV/DEC 2025, rest 2026
-  function calYear(mth){return(mth==='NOV'||mth==='DEC')?2025:2026;}
+  const y=myt.getUTCFullYear(),m=myt.getUTCMonth(),d=myt.getUTCDate();
+
   for(const w of CALENDAR){
-    const baseYr=calYear(w.mth),baseMo=MI[w.mth];
-    // When sun > sat, the week STARTS in baseMo and the Saturday OVERFLOWS into next month
-    // e.g. WK626: APR sun=26 ... sat=2(MAY)
-    let sunY=baseYr,sunM=baseMo,satY=baseYr,satM=baseMo;
-    if(w.sun>w.sat){
-      // Saturday is in the next month
-      satM=baseMo+1;
-      if(satM>11){satM=0;satY=baseYr+1;}
-    }
-    const afterSun=(todayY>sunY)||(todayY===sunY&&todayM>sunM)||(todayY===sunY&&todayM===sunM&&todayD>=w.sun);
-    const beforeSat=(todayY<satY)||(todayY===satY&&todayM<satM)||(todayY===satY&&todayM===satM&&todayD<=w.sat);
-    if(afterSun&&beforeSat)return w.wk;
+    if(dateInWeek(y,m,d,w))return w.wk;
   }
+  // Fallback: return last week
   return CALENDAR[CALENDAR.length-1].wk;
 }
-const CURRENT_WK=detectCurrentWeek();
-const CURRENT_WKNUM=CURRENT_WK-600;
-function getWk(fwk){return CALENDAR.find(w=>w.wk===fwk);}
 
 function dateToFiscalWeek(dateStr){
   if(!dateStr)return null;
-  const parts=dateStr.split('-');if(parts.length<3)return null;
+  const parts=dateStr.split('-');
+  if(parts.length<3)return null;
   const y=parseInt(parts[0]),m=parseInt(parts[1])-1,d=parseInt(parts[2]);
-  const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
-  function calYear(mth){return(mth==='NOV'||mth==='DEC')?2025:2026;}
   for(const w of CALENDAR){
-    const baseYr=calYear(w.mth),baseMo=MI[w.mth];
-    let sunY=baseYr,sunM=baseMo,satY=baseYr,satM=baseMo;
-    if(w.sun>w.sat){
-      // Saturday overflows into next month
-      satM=baseMo+1;
-      if(satM>11){satM=0;satY=baseYr+1;}
-    }
-    const afterSun=(y>sunY)||(y===sunY&&m>sunM)||(y===sunY&&m===sunM&&d>=w.sun);
-    const beforeSat=(y<satY)||(y===satY&&m<satM)||(y===satY&&m===satM&&d<=w.sat);
-    if(afterSun&&beforeSat)return w.wk;
+    if(dateInWeek(y,m,d,w))return w.wk;
   }
   return null;
 }
+
+
+const CURRENT_WKNUM=CURRENT_WK-600;
+function getWk(fwk){return CALENDAR.find(w=>w.wk===fwk);}
 
 const PM_VALID_TYPES=['Quarterly Maintenance','Half-Yearly Maintenance'];
 
@@ -851,16 +984,16 @@ async function pmAutoSyncFromRecord(record){
     else{try{const pmData=await jsonp({action:'getPMData',typeId},20000);if(!pmData||pmData.status==='error')continue;moldsToSearch=(pmData.molds||[]).map(m=>({...m,scheduledWeeks:m.scheduledWeeks||[]}));tempHistory=pmData.history||[];}catch(e){continue;}}
     const mold=moldsToSearch.find(m=>m.name===equipName);
     if(!mold||!mold.scheduledWeeks.length)continue;
-    const doneSets=new Set(tempHistory.filter(h=>h.moldId===mold.id&&h.fiscalYear===26).map(h=>h.scheduledWkNum));
+    const doneSets=new Set(tempHistory.filter(h=>h.moldId===mold.id&&h.fiscalYear===ACTIVE_FY2).map(h=>h.scheduledWkNum));
     const pendingWeeks=mold.scheduledWeeks.filter(wk=>!doneSets.has(wk));
     if(!pendingWeeks.length)continue;
     const BUFFER=2;let matchedWkNum=null,bestDiff=Infinity;
     for(const wk of pendingWeeks){const diff=Math.abs(wk-recordWkNum);const diffWrapped=Math.min(diff,52-diff);if(diffWrapped<=BUFFER&&diffWrapped<bestDiff){bestDiff=diffWrapped;matchedWkNum=wk;}}
     if(matchedWkNum===null)continue;
     if(doneSets.has(matchedWkNum))continue;
-    const matchedFiscalWk=600+matchedWkNum;
-    const histEntry={moldId:mold.id,moldName:mold.name,moldGroup:mold.group||'',scheduledWkNum:matchedWkNum,fiscalYear:26,fiscalWeek:matchedFiscalWk,doneDate:record.dateStart,doneBy:record.pic||'—',notes:'[AUTO] '+mtype+(matchedWkNum!==recordWkNum?' (nearest wk)':''),recordedAt:new Date().toLocaleDateString('en-MY'),source:'eol'};
-    try{const r=await jsonp({action:'pmAppendHistory',typeId,hMoldId:String(mold.id),hMoldName:mold.name,hMoldGroup:mold.group||'',hSchedWkNum:String(matchedWkNum),hFiscalYear:'26',hFiscalWeek:String(matchedFiscalWk),hDoneDate:record.dateStart,hDoneBy:record.pic||'',hNotes:'[AUTO] '+mtype+(matchedWkNum!==recordWkNum?' (nearest wk)':''),hRecordedAt:new Date().toLocaleDateString('en-MY'),hSource:'eol'},20000);
+    const matchedFiscalWk=(ACTIVE_FY2-20)*100+matchedWkNum;
+    const histEntry={moldId:mold.id,moldName:mold.name,moldGroup:mold.group||'',scheduledWkNum:matchedWkNum,fiscalYear:ACTIVE_FY2,fiscalWeek:matchedFiscalWk,doneDate:record.dateStart,doneBy:record.pic||'—',notes:'[AUTO] '+mtype+(matchedWkNum!==recordWkNum?' (nearest wk)':''),recordedAt:new Date().toLocaleDateString('en-MY'),source:'eol'};
+    try{const r=await jsonp({action:'pmAppendHistory',typeId,hMoldId:String(mold.id),hMoldName:mold.name,hMoldGroup:mold.group||'',hSchedWkNum:String(matchedWkNum),hFiscalYear:String(ACTIVE_FY2),hFiscalWeek:String(matchedFiscalWk),hDoneDate:record.dateStart,hDoneBy:record.pic||'',hNotes:'[AUTO] '+mtype+(matchedWkNum!==recordWkNum?' (nearest wk)':''),hRecordedAt:new Date().toLocaleDateString('en-MY'),hSource:'eol'},20000);
       if(r&&r.status==='ok'){if(currentSchedType&&currentSchedType.id===typeId){pmHistory.push(histEntry);if(pmActiveSec==='pm-dashboard')renderPMDashboard();if(pmActiveSec==='pm-molds')renderPMMolds();if(pmActiveSec==='pm-history')renderPMHistory();}const wkInfo=getWk(matchedFiscalWk);toast('🔗 PM Auto-Sync: '+equipName+' WK'+matchedFiscalWk+(wkInfo?' ('+wkInfo.mth+')':'')+' marked ✅ Done!');}
     }catch(e){console.warn('PM auto-sync failed:',e.message);}
     break;
@@ -998,7 +1131,7 @@ async function doLogin(){
 function doLogout(){
   role=null;sRole=null;recs=[];pics=[];types=[];departments=[];photoQueue=[];
   pmMolds=[];pmHistory=[];pmUsers=[];curDept=null;currentModule=null;currentSchedType=null;
-  rptSelectedEquip=new Set();rptSelectedSections=new Set(['all']);
+  rptSelectedEquip=new Set();rptSelectedSections=new Set(['all']);rptSelectedActivities=new Set(['all']);
   selectedActivity=null;editSelectedActivity=null;
   ['aUser','aPass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('loginErr').style.display='none';
@@ -1319,7 +1452,6 @@ function openEdit(id){
   document.getElementById('eEquip').value=baseEquip;const parsedPresses=r.presses?r.presses.split(', ').map(p=>p.trim()).filter(Boolean):[];
   if(deptHasPresses(dept)){const eq=dept.equipment.find(e=>eqId(e)===baseEquip);showEditPressSel(eq?eqPresses(eq):['Press 1','Press 2','Press 3','Press 4'],parsedPresses);}else showEditPressSel([],[]);
   showEditHalfSel(!!(dept&&dept.name.toLowerCase()==='mold die'),existHalf);
-  // restore PM activity
   editSelectedActivity=r.pmActivity||null;
   ['eActAssemble','eActDismantle','eActChangePart'].forEach(id=>document.getElementById(id)?.classList.remove('active'));
   if(editSelectedActivity){const amap={assemble:'eActAssemble',dismantle:'eActDismantle',changepart:'eActChangePart'};document.getElementById(amap[editSelectedActivity])?.classList.add('active');}
@@ -1345,8 +1477,6 @@ async function confirmDel(){if(!delId)return;closeMod('delMod');sy('sync');try{c
 /* ══════════════════════════════════════════
    REPORT — ENHANCED WITH SECTION + MULTI-EQUIP
 ══════════════════════════════════════════ */
-
-/* --- helpers to extract section from equipment string --- */
 function getEquipSection(equipStr){
   const m=(equipStr||'').match(/\((Top|Bottom|Both)\)\s*$/i);
   return m?m[1].toLowerCase():null;
@@ -1354,365 +1484,89 @@ function getEquipSection(equipStr){
 function getEquipBaseName(equipStr){
   return (equipStr||'').replace(/\s*\((Top|Bottom|Both)\)\s*$/i,'').trim();
 }
-
-/* --- Section pill toggle (multi-select, "all" is mutually exclusive) --- */
 function toggleSectionPill(el){
   const sec=el.dataset.section;
-  if(sec==='all'){
-    // selecting All clears everything else
-    rptSelectedSections=new Set(['all']);
-  } else {
-    rptSelectedSections.delete('all');
-    if(rptSelectedSections.has(sec)){
-      rptSelectedSections.delete(sec);
-      if(rptSelectedSections.size===0)rptSelectedSections.add('all');
-    } else {
-      rptSelectedSections.add(sec);
-    }
-  }
-  // update pill styles
-  document.querySelectorAll('#sectionFilterWrap .section-pill').forEach(p=>{
-    const s=p.dataset.section;
-    p.className='section-pill';
-    if(rptSelectedSections.has(s)){
-      if(s==='all')p.classList.add('sel-all');
-      else if(s==='top')p.classList.add('sel-top');
-      else if(s==='bottom')p.classList.add('sel-bottom');
-      else if(s==='both')p.classList.add('sel-both');
-      else p.classList.add('sel');
-    }
-  });
+  if(sec==='all'){rptSelectedSections=new Set(['all']);}
+  else{rptSelectedSections.delete('all');if(rptSelectedSections.has(sec)){rptSelectedSections.delete(sec);if(rptSelectedSections.size===0)rptSelectedSections.add('all');}else{rptSelectedSections.add(sec);}}
+  document.querySelectorAll('#sectionFilterWrap .section-pill').forEach(p=>{const s=p.dataset.section;p.className='section-pill';if(rptSelectedSections.has(s)){if(s==='all')p.classList.add('sel-all');else if(s==='top')p.classList.add('sel-top');else if(s==='bottom')p.classList.add('sel-bottom');else if(s==='both')p.classList.add('sel-both');else p.classList.add('sel');}});
   renderReport();
 }
-
-/* --- Build equipment multi-chip list --- */
 function buildEquipChips(dept){
-  const container=document.getElementById('rptEquipChips');
-  if(!container)return;
-  // Collect all equipment from filtered dept or all
+  const container=document.getElementById('rptEquipChips');if(!container)return;
   let equipList;
-  if(dept){
-    const d=departments.find(x=>x.name===dept);
-    equipList=d?d.equipment.map(e=>eqId(e)):[];
-    // also include any in records for that dept
-    const fromRecs=[...new Set(recs.filter(r=>r.dept===dept).map(r=>getEquipBaseName(r.equipment)).filter(Boolean))];
-    fromRecs.forEach(eq=>{if(!equipList.includes(eq))equipList.push(eq);});
-  } else {
-    equipList=[...new Set(recs.map(r=>getEquipBaseName(r.equipment)).filter(Boolean))].sort();
-  }
+  if(dept){const d=departments.find(x=>x.name===dept);equipList=d?d.equipment.map(e=>eqId(e)):[];const fromRecs=[...new Set(recs.filter(r=>r.dept===dept).map(r=>getEquipBaseName(r.equipment)).filter(Boolean))];fromRecs.forEach(eq=>{if(!equipList.includes(eq))equipList.push(eq);});}
+  else{equipList=[...new Set(recs.map(r=>getEquipBaseName(r.equipment)).filter(Boolean))].sort();}
   if(!equipList.length){container.innerHTML='<span style="color:var(--tx2);font-size:12px;">No equipment found.</span>';return;}
-  // keep only valid selections
-  const newSel=new Set([...rptSelectedEquip].filter(e=>equipList.includes(e)));
-  rptSelectedEquip=newSel;
-  container.innerHTML=equipList.map(eq=>{
-    const sel=rptSelectedEquip.has(eq)||rptSelectedEquip.size===0;
-    return`<div class="rpt-equip-chip${sel?' sel':''}" data-equip="${esc(eq)}" onclick="toggleEquipChip(this)">${esc(eq)}</div>`;
-  }).join('');
+  const newSel=new Set([...rptSelectedEquip].filter(e=>equipList.includes(e)));rptSelectedEquip=newSel;
+  container.innerHTML=equipList.map(eq=>{const sel=rptSelectedEquip.has(eq)||rptSelectedEquip.size===0;return`<div class="rpt-equip-chip${sel?' sel':''}" data-equip="${esc(eq)}" onclick="toggleEquipChip(this)">${esc(eq)}</div>`;}).join('');
   updateEquipCount();
 }
-
-function toggleEquipChip(el){
-  const eq=el.dataset.equip;
-  if(rptSelectedEquip.has(eq)){
-    rptSelectedEquip.delete(eq);
-    el.classList.remove('sel');
-  } else {
-    rptSelectedEquip.add(eq);
-    el.classList.add('sel');
-  }
-  updateEquipCount();
-  renderReport();
-}
-
-function selectAllEquip(){
-  document.querySelectorAll('#rptEquipChips .rpt-equip-chip').forEach(el=>{
-    rptSelectedEquip.add(el.dataset.equip);el.classList.add('sel');
-  });
-  updateEquipCount();renderReport();
-}
-
-function clearEquip(){
-  rptSelectedEquip.clear();
-  document.querySelectorAll('#rptEquipChips .rpt-equip-chip').forEach(el=>el.classList.remove('sel'));
-  updateEquipCount();renderReport();
-}
-
-function updateEquipCount(){
-  const countEl=document.getElementById('equipSelCount');if(!countEl)return;
-  const total=document.querySelectorAll('#rptEquipChips .rpt-equip-chip').length;
-  if(rptSelectedEquip.size===0||rptSelectedEquip.size===total){
-    countEl.style.display='none';
-  } else {
-    countEl.style.display='';countEl.textContent=rptSelectedEquip.size;
-  }
-}
-
+function toggleEquipChip(el){const eq=el.dataset.equip;if(rptSelectedEquip.has(eq)){rptSelectedEquip.delete(eq);el.classList.remove('sel');}else{rptSelectedEquip.add(eq);el.classList.add('sel');}updateEquipCount();renderReport();}
+function selectAllEquip(){document.querySelectorAll('#rptEquipChips .rpt-equip-chip').forEach(el=>{rptSelectedEquip.add(el.dataset.equip);el.classList.add('sel');});updateEquipCount();renderReport();}
+function clearEquip(){rptSelectedEquip.clear();document.querySelectorAll('#rptEquipChips .rpt-equip-chip').forEach(el=>el.classList.remove('sel'));updateEquipCount();renderReport();}
+function updateEquipCount(){const countEl=document.getElementById('equipSelCount');if(!countEl)return;const total=document.querySelectorAll('#rptEquipChips .rpt-equip-chip').length;if(rptSelectedEquip.size===0||rptSelectedEquip.size===total){countEl.style.display='none';}else{countEl.style.display='';countEl.textContent=rptSelectedEquip.size;}}
 function fillReportFilters(){
-  const rd=document.getElementById('rFdept'),sv=rd.value;
-  rd.innerHTML='<option value="">All Departments</option>'+departments.map(d=>`<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');
-  rd.value=sv;
-  const rp=document.getElementById('rFpic'),svp=rp.value;
-  rp.innerHTML='<option value="">All PIC</option>'+pics.map(p=>{const n=typeof p==='string'?p:p.name||'';return`<option value="${esc(n)}">${esc(n)}</option>`;}).join('');
-  rp.value=svp;
-  const rm=document.getElementById('rFmtype'),svm=rm.value;
-  rm.innerHTML='<option value="">All Types</option>'+types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
-  rm.value=svm;
-  buildEquipChips(sv);
-  renderSectionPills();
+  const rd=document.getElementById('rFdept'),sv=rd.value;rd.innerHTML='<option value="">All Departments</option>'+departments.map(d=>`<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');rd.value=sv;
+  const rp=document.getElementById('rFpic'),svp=rp.value;rp.innerHTML='<option value="">All PIC</option>'+pics.map(p=>{const n=typeof p==='string'?p:p.name||'';return`<option value="${esc(n)}">${esc(n)}</option>`;}).join('');rp.value=svp;
+  const rm=document.getElementById('rFmtype'),svm=rm.value;rm.innerHTML='<option value="">All Types</option>'+types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');rm.value=svm;
+  buildEquipChips(sv);renderSectionPills();renderActivityPills();
 }
-
-function renderSectionPills(){
-  document.querySelectorAll('#sectionFilterWrap .section-pill').forEach(p=>{
-    const s=p.dataset.section;
-    p.className='section-pill';
-    if(rptSelectedSections.has(s)){
-      if(s==='all')p.classList.add('sel-all');
-      else if(s==='top')p.classList.add('sel-top');
-      else if(s==='bottom')p.classList.add('sel-bottom');
-      else if(s==='both')p.classList.add('sel-both');
-      else p.classList.add('sel');
-    }
-  });
+function renderSectionPills(){document.querySelectorAll('#sectionFilterWrap .section-pill').forEach(p=>{const s=p.dataset.section;p.className='section-pill';if(rptSelectedSections.has(s)){if(s==='all')p.classList.add('sel-all');else if(s==='top')p.classList.add('sel-top');else if(s==='bottom')p.classList.add('sel-bottom');else if(s==='both')p.classList.add('sel-both');else p.classList.add('sel');}});}
+function toggleActivityPill(el){
+  const act=el.dataset.activity;
+  if(act==='all'){rptSelectedActivities=new Set(['all']);}
+  else{rptSelectedActivities.delete('all');if(rptSelectedActivities.has(act)){rptSelectedActivities.delete(act);if(rptSelectedActivities.size===0)rptSelectedActivities.add('all');}else{rptSelectedActivities.add(act);}}
+  renderActivityPills();renderReport();
 }
-
-function onRptDeptChange(){
-  const dept=document.getElementById('rFdept').value;
-  rptSelectedEquip.clear();
-  buildEquipChips(dept);
-  renderReport();
-}
-
-function clearRptFilters(){
-  ['rFdept','rFpic','rFmtype','rFstat','rFfrom','rFto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  rptFreqDept='';rptHistDept='';
-  rptSelectedEquip.clear();
-  rptSelectedSections=new Set(['all']);
-  buildEquipChips('');
-  renderSectionPills();
-  updateEquipCount();
-  renderReport();
-}
-
-/* Apply section filter to a record */
-function recordMatchesSection(r){
-  if(rptSelectedSections.has('all'))return true;
-  const sec=getEquipSection(r.equipment);
-  // 'none' means no section suffix at all
-  if(rptSelectedSections.has('none')&&sec===null)return true;
-  if(sec&&rptSelectedSections.has(sec))return true;
-  return false;
-}
-
+function renderActivityPills(){document.querySelectorAll('#activityFilterWrap .section-pill').forEach(p=>{const a=p.dataset.activity;p.className='section-pill';if(rptSelectedActivities.has(a)){if(a==='all')p.classList.add('sel-all');else if(a==='assemble')p.classList.add('sel-top');else if(a==='dismantle')p.classList.add('sel-bottom');else if(a==='changepart')p.classList.add('sel-both');else p.classList.add('sel');}});}
+function onRptDeptChange(){const dept=document.getElementById('rFdept').value;rptSelectedEquip.clear();buildEquipChips(dept);renderReport();}
+function clearRptFilters(){['rFdept','rFpic','rFmtype','rFstat','rFfrom','rFto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});rptFreqDept='';rptHistDept='';rptSelectedEquip.clear();rptSelectedSections=new Set(['all']);rptSelectedActivities=new Set(['all']);buildEquipChips('');renderSectionPills();renderActivityPills();updateEquipCount();renderReport();}
+function recordMatchesSection(r){if(rptSelectedSections.has('all'))return true;const sec=getEquipSection(r.equipment);if(rptSelectedSections.has('none')&&sec===null)return true;if(sec&&rptSelectedSections.has(sec))return true;return false;}
 function getFilteredRecs(){
-  const dept=document.getElementById('rFdept')?.value||'';
-  const from=document.getElementById('rFfrom')?.value||'';
-  const to=document.getElementById('rFto')?.value||'';
-  const pic=document.getElementById('rFpic')?.value||'';
-  const mtype=document.getElementById('rFmtype')?.value||'';
-  const stat=document.getElementById('rFstat')?.value||'';
-
+  const dept=document.getElementById('rFdept')?.value||'',from=document.getElementById('rFfrom')?.value||'',to=document.getElementById('rFto')?.value||'',pic=document.getElementById('rFpic')?.value||'',mtype=document.getElementById('rFmtype')?.value||'',stat=document.getElementById('rFstat')?.value||'';
   return recs.filter(r=>{
-    if(dept&&r.dept!==dept)return false;
-    if(pic&&r.pic!==pic)return false;
-    if(mtype&&r.maintenanceType!==mtype)return false;
-    if(stat&&r.status!==stat)return false;
-    if(from&&r.dateStart&&r.dateStart<from)return false;
-    if(to&&r.dateStart&&r.dateStart>to)return false;
-    // multi-equip filter: if any selected, match base name
-    if(rptSelectedEquip.size>0){
-      const base=getEquipBaseName(r.equipment);
-      if(!rptSelectedEquip.has(base))return false;
-    }
-    // section filter
+    if(dept&&r.dept!==dept)return false;if(pic&&r.pic!==pic)return false;if(mtype&&r.maintenanceType!==mtype)return false;if(stat&&r.status!==stat)return false;
+    if(from&&r.dateStart&&r.dateStart<from)return false;if(to&&r.dateStart&&r.dateStart>to)return false;
+    if(rptSelectedEquip.size>0){const base=getEquipBaseName(r.equipment);if(!rptSelectedEquip.has(base))return false;}
     if(!recordMatchesSection(r))return false;
+    if(!rptSelectedActivities.has('all')){const act=r.pmActivity||'';if(rptSelectedActivities.has('none')&&!act)return true;if(act&&rptSelectedActivities.has(act))return true;return false;}
     return true;
   });
 }
-
-/* Active filter summary bar */
 function renderActiveFilterBar(){
-  const bar=document.getElementById('rptActiveFilters');if(!bar)return;
-  const tags=[];
-  const dept=document.getElementById('rFdept')?.value;
-  if(dept)tags.push({label:'Dept: '+dept,clear:()=>{document.getElementById('rFdept').value='';onRptDeptChange();}});
+  const bar=document.getElementById('rptActiveFilters');if(!bar)return;const tags=[];
+  const dept=document.getElementById('rFdept')?.value;if(dept)tags.push({label:'Dept: '+dept,clear:()=>{document.getElementById('rFdept').value='';onRptDeptChange();}});
   if(rptSelectedEquip.size>0)tags.push({label:rptSelectedEquip.size+' equipment selected',clear:()=>clearEquip()});
-  if(!rptSelectedSections.has('all')){
-    const secLabels=[...rptSelectedSections].map(s=>s==='none'?'No Section':s.charAt(0).toUpperCase()+s.slice(1)).join(', ');
-    tags.push({label:'Section: '+secLabels,clear:()=>{rptSelectedSections=new Set(['all']);renderSectionPills();renderReport();}});
-  }
-  const pic=document.getElementById('rFpic')?.value;
-  if(pic)tags.push({label:'PIC: '+pic,clear:()=>{document.getElementById('rFpic').value='';renderReport();}});
-  const mtype=document.getElementById('rFmtype')?.value;
-  if(mtype)tags.push({label:'Type: '+mtype,clear:()=>{document.getElementById('rFmtype').value='';renderReport();}});
-  const stat=document.getElementById('rFstat')?.value;
-  if(stat)tags.push({label:'Status: '+stat,clear:()=>{document.getElementById('rFstat').value='';renderReport();}});
-  const from=document.getElementById('rFfrom')?.value,to=document.getElementById('rFto')?.value;
-  if(from||to)tags.push({label:`Date: ${from||'…'} → ${to||'…'}`,clear:()=>{document.getElementById('rFfrom').value='';document.getElementById('rFto').value='';renderReport();}});
+  if(!rptSelectedSections.has('all')){const secLabels=[...rptSelectedSections].map(s=>s==='none'?'No Section':s.charAt(0).toUpperCase()+s.slice(1)).join(', ');tags.push({label:'Section: '+secLabels,clear:()=>{rptSelectedSections=new Set(['all']);renderSectionPills();renderReport();}});}
+  if(!rptSelectedActivities.has('all')){const actMap={assemble:'Assemble',dismantle:'Dismantle',changepart:'Change Part',none:'Not Set'};const actLabels=[...rptSelectedActivities].map(a=>actMap[a]||a).join(', ');tags.push({label:'Activity: '+actLabels,clear:()=>{rptSelectedActivities=new Set(['all']);renderActivityPills();renderReport();}});}
+  const pic=document.getElementById('rFpic')?.value;if(pic)tags.push({label:'PIC: '+pic,clear:()=>{document.getElementById('rFpic').value='';renderReport();}});
+  const mtype=document.getElementById('rFmtype')?.value;if(mtype)tags.push({label:'Type: '+mtype,clear:()=>{document.getElementById('rFmtype').value='';renderReport();}});
+  const stat=document.getElementById('rFstat')?.value;if(stat)tags.push({label:'Status: '+stat,clear:()=>{document.getElementById('rFstat').value='';renderReport();}});
+  const from=document.getElementById('rFfrom')?.value,to=document.getElementById('rFto')?.value;if(from||to)tags.push({label:`Date: ${from||'…'} → ${to||'…'}`,clear:()=>{document.getElementById('rFfrom').value='';document.getElementById('rFto').value='';renderReport();}});
   if(!tags.length){bar.innerHTML='<span style="font-size:11px;color:var(--tx2);">No active filters</span>';return;}
   bar.innerHTML=tags.map((t,i)=>`<span class="af-tag">${esc(t.label)} <button onclick="(${t.clear.toString()})()" style="background:none;border:none;color:var(--acc);cursor:pointer;font-size:12px;padding:0;margin-left:2px;">×</button></span>`).join('');
 }
-
-function sectionBadge(equipStr){
-  const sec=getEquipSection(equipStr);
-  if(!sec)return'';
-  const cls=sec==='top'?'sb-top':sec==='bottom'?'sb-bottom':'sb-both';
-  const icon=sec==='top'?'⬆':sec==='bottom'?'⬇':'↕';
-  return`<span class="section-badge ${cls}">${icon} ${sec.charAt(0).toUpperCase()+sec.slice(1)}</span>`;
-}
-
+function sectionBadge(equipStr){const sec=getEquipSection(equipStr);if(!sec)return'';const cls=sec==='top'?'sb-top':sec==='bottom'?'sb-bottom':'sb-both';const icon=sec==='top'?'⬆':sec==='bottom'?'⬇':'↕';return`<span class="section-badge ${cls}">${icon} ${sec.charAt(0).toUpperCase()+sec.slice(1)}</span>`;}
 function setFreqDept(d){rptFreqDept=d;renderReport();}
 function setHistDept(d){rptHistDept=d;renderReport();}
-
-function rptDeptChips(cur,fn){
-  const dn=[...new Set(recs.map(r=>r.dept).filter(Boolean))].sort();
-  if(!dn.length)return'';
-  return`<div class="rpt-dept-chips"><div class="rpt-dept-chip${cur===''?' active':''}" onclick="${fn}('')">All</div>${dn.map(n=>`<div class="rpt-dept-chip${cur===n?' active':''}" onclick="${fn}('${n.replace(/'/g,"\\'")}')">${deptIcon(n)} ${esc(n)}</div>`).join('')}</div>`;
-}
-
+function rptDeptChips(cur,fn){const dn=[...new Set(recs.map(r=>r.dept).filter(Boolean))].sort();if(!dn.length)return'';return`<div class="rpt-dept-chips"><div class="rpt-dept-chip${cur===''?' active':''}" onclick="${fn}('')">All</div>${dn.map(n=>`<div class="rpt-dept-chip${cur===n?' active':''}" onclick="${fn}('${n.replace(/'/g,"\\'")}')">  ${deptIcon(n)} ${esc(n)}</div>`).join('')}</div>`;}
 function renderReport(){
   renderActiveFilterBar();
-  const filtered=getFilteredRecs();
-  const summaryEl=document.getElementById('reportSummary'),contentEl=document.getElementById('reportContent');
+  const filtered=getFilteredRecs();const summaryEl=document.getElementById('reportSummary'),contentEl=document.getElementById('reportContent');
   if(!summaryEl||!contentEl)return;
-  if(!filtered.length){
-    summaryEl.innerHTML='';
-    contentEl.innerHTML='<div class="empty"><div class="ei">📄</div><h4>No records match filters</h4></div>';
-    return;
-  }
-
+  if(!filtered.length){summaryEl.innerHTML='';contentEl.innerHTML='<div class="empty"><div class="ei">📄</div><h4>No records match filters</h4></div>';return;}
   const done=filtered.filter(r=>r.status==='completed').length,wip=filtered.length-done;
-
-  // For frequency we group by BASE name (so MD-001 (Top) and MD-001 (Bottom) group together)
   const freqRecs=rptFreqDept?filtered.filter(r=>r.dept===rptFreqDept):filtered;
-  const freqMap={};
-  freqRecs.forEach(r=>{
-    const base=getEquipBaseName(r.equipment)||r.equipment||'Unknown';
-    if(!freqMap[base])freqMap[base]={count:0,sections:{top:0,bottom:0,both:0,none:0},dept:r.dept};
-    freqMap[base].count++;
-    const sec=getEquipSection(r.equipment)||'none';
-    freqMap[base].sections[sec]=(freqMap[base].sections[sec]||0)+1;
-  });
-
-  const equips=[...new Set(filtered.map(r=>getEquipBaseName(r.equipment)).filter(Boolean))];
-  const depts=[...new Set(filtered.map(r=>r.dept).filter(Boolean))];
-  const topEntry=Object.entries(freqMap).sort((a,b)=>b[1].count-a[1].count)[0];
-
-  // Section breakdown summary for filtered
-  const secCounts={top:0,bottom:0,both:0,none:0};
-  filtered.forEach(r=>{const s=getEquipSection(r.equipment)||'none';secCounts[s]=(secCounts[s]||0)+1;});
-  const hasSections=secCounts.top>0||secCounts.bottom>0||secCounts.both>0;
-
-  summaryEl.innerHTML=`<div class="rpt-summary-grid">
-    <div class="rpt-scard"><div class="rn">${filtered.length}</div><div class="rl">Total Services</div></div>
-    <div class="rpt-scard"><div class="rn" style="color:#3fb950">${done}</div><div class="rl">Completed</div></div>
-    <div class="rpt-scard"><div class="rn">${wip}</div><div class="rl">In Progress</div></div>
-    <div class="rpt-scard"><div class="rn">${equips.length}</div><div class="rl">Equipment</div></div>
-    <div class="rpt-scard"><div class="rn">${depts.length}</div><div class="rl">Departments</div></div>
-    ${topEntry?`<div class="rpt-scard"><div class="rn" style="font-size:18px;line-height:1.3">${esc(topEntry[0])}</div><div class="rl">Most Serviced (${topEntry[1].count}x)</div></div>`:''}
-    ${hasSections?`
-    <div class="rpt-scard"><div class="rn" style="color:#10b981">${secCounts.top}</div><div class="rl">⬆ Top Services</div></div>
-    <div class="rpt-scard"><div class="rn" style="color:#a78bfa">${secCounts.bottom}</div><div class="rl">⬇ Bottom Services</div></div>
-    <div class="rpt-scard"><div class="rn" style="color:var(--acc)">${secCounts.both}</div><div class="rl">↕ Both Services</div></div>`:''}
-  </div>`;
-
-  // Frequency table — now shows section breakdown columns
+  const freqMap={};freqRecs.forEach(r=>{const base=getEquipBaseName(r.equipment)||r.equipment||'Unknown';if(!freqMap[base])freqMap[base]={count:0,sections:{top:0,bottom:0,both:0,none:0},dept:r.dept};freqMap[base].count++;const sec=getEquipSection(r.equipment)||'none';freqMap[base].sections[sec]=(freqMap[base].sections[sec]||0)+1;});
+  const equips=[...new Set(filtered.map(r=>getEquipBaseName(r.equipment)).filter(Boolean))];const depts=[...new Set(filtered.map(r=>r.dept).filter(Boolean))];const topEntry=Object.entries(freqMap).sort((a,b)=>b[1].count-a[1].count)[0];
+  const secCounts={top:0,bottom:0,both:0,none:0};filtered.forEach(r=>{const s=getEquipSection(r.equipment)||'none';secCounts[s]=(secCounts[s]||0)+1;});const hasSections=secCounts.top>0||secCounts.bottom>0||secCounts.both>0;
+  summaryEl.innerHTML=`<div class="rpt-summary-grid"><div class="rpt-scard"><div class="rn">${filtered.length}</div><div class="rl">Total Services</div></div><div class="rpt-scard"><div class="rn" style="color:#3fb950">${done}</div><div class="rl">Completed</div></div><div class="rpt-scard"><div class="rn">${wip}</div><div class="rl">In Progress</div></div><div class="rpt-scard"><div class="rn">${equips.length}</div><div class="rl">Equipment</div></div><div class="rpt-scard"><div class="rn">${depts.length}</div><div class="rl">Departments</div></div>${topEntry?`<div class="rpt-scard"><div class="rn" style="font-size:18px;line-height:1.3">${esc(topEntry[0])}</div><div class="rl">Most Serviced (${topEntry[1].count}x)</div></div>`:''}</div>`;
   const maxFreq=Math.max(...Object.values(freqMap).map(v=>v.count),1);
-  const freqRows=Object.entries(freqMap).sort((a,b)=>b[1].count-a[1].count).map(([base,info])=>{
-    const pct=Math.round((info.count/maxFreq)*100);
-    const secBreakdown=hasSections?`
-      ${info.sections.top?`<span class="section-badge sb-top">⬆ Top ×${info.sections.top}</span> `:''}
-      ${info.sections.bottom?`<span class="section-badge sb-bottom">⬇ Bot ×${info.sections.bottom}</span> `:''}
-      ${info.sections.both?`<span class="section-badge sb-both">↕ Both ×${info.sections.both}</span> `:''}
-    `:'';
-    return`<tr>
-      <td><strong>${esc(base)}</strong>${hasSections?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">${secBreakdown}</div>`:''}</td>
-      <td><span class="dept-tag" style="font-size:10px;">${deptIcon(info.dept)} ${esc(info.dept)}</span></td>
-      <td style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--acc);">${info.count}</td>
-      <td style="min-width:80px;"><div style="height:6px;background:rgba(240,165,0,.2);border-radius:3px;"><div style="width:${pct}%;height:6px;background:var(--acc);border-radius:3px;"></div></div></td>
-    </tr>`;
-  }).join('');
-
-  // History grouped by base equipment name
+  const freqRows=Object.entries(freqMap).sort((a,b)=>b[1].count-a[1].count).map(([base,info])=>{const pct=Math.round((info.count/maxFreq)*100);return`<tr><td><strong>${esc(base)}</strong></td><td><span class="dept-tag" style="font-size:10px;">${deptIcon(info.dept)} ${esc(info.dept)}</span></td><td style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--acc);">${info.count}</td><td style="min-width:80px;"><div style="height:6px;background:rgba(240,165,0,.2);border-radius:3px;"><div style="width:${pct}%;height:6px;background:var(--acc);border-radius:3px;"></div></div></td></tr>`;}).join('');
   const histRecs=rptHistDept?filtered.filter(r=>r.dept===rptHistDept):filtered;
-  const grouped={};
-  histRecs.forEach(r=>{
-    const base=getEquipBaseName(r.equipment)||r.equipment||'Unknown';
-    if(!grouped[base])grouped[base]=[];
-    grouped[base].push(r);
-  });
-
-  const historyHTML=Object.entries(grouped).map(([base,rs])=>{
-    const dn=rs[0]?.dept||'';
-    const doneCount=rs.filter(r=>r.status==='completed').length;
-    // count sections within this group
-    const gSecCounts={top:0,bottom:0,both:0};
-    rs.forEach(r=>{const s=getEquipSection(r.equipment);if(s)gSecCounts[s]=(gSecCounts[s]||0)+1;});
-    const gHasSec=gSecCounts.top>0||gSecCounts.bottom>0||gSecCounts.both>0;
-    const rows=rs.map(r=>{
-      const parts=(r.parts||'').split(',').map(p=>p.trim()).filter(Boolean);
-      const ptags=parts.map(p=>`<span class="ptag" style="font-size:10px;">${esc(p)}</span>`).join(' ');
-      const secBadge=sectionBadge(r.equipment);
-      return`<tr>
-        <td>${fdd(r.dateStart)}</td>
-        <td>${r.dateFinish?fdd(r.dateFinish):'<span style="color:var(--tx2);">—</span>'}</td>
-        <td>${esc(r.pic)}</td>
-        <td>${esc(r.maintenanceType)}</td>
-        ${gHasSec?`<td>${secBadge}</td>`:''}
-        <td style="max-width:180px;font-size:12px;">${esc(r.details)}</td>
-        <td style="max-width:140px;">${ptags||'<span style="color:var(--tx2);font-size:11px;">—</span>'}</td>
-        <td><span class="sbadge ${r.status==='completed'?'s-ok">✅ Done':'s-wip">🔄 WIP'}</span></td>
-      </tr>`;
-    }).join('');
-    const secSummary=gHasSec?`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">
-      ${gSecCounts.top?`<span class="section-badge sb-top">⬆ Top ×${gSecCounts.top}</span>`:''}
-      ${gSecCounts.bottom?`<span class="section-badge sb-bottom">⬇ Bottom ×${gSecCounts.bottom}</span>`:''}
-      ${gSecCounts.both?`<span class="section-badge sb-both">↕ Both ×${gSecCounts.both}</span>`:''}
-    </div>`:'';
-    return`<div class="rpt-equip-block">
-      <div class="rpt-equip-hdr">
-        <div>
-          <div class="rpt-equip-name">${esc(base)}</div>
-          <div style="margin-top:4px;"><span class="dept-tag" style="font-size:10px;">${deptIcon(dn)} ${esc(dn)}</span></div>
-          ${secSummary}
-        </div>
-        <div style="text-align:right;">
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--acc);">${rs.length}x</div>
-          <div style="font-size:11px;color:var(--tx2);">${doneCount} done · ${rs.length-doneCount} WIP</div>
-        </div>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="rpt-table">
-          <thead><tr>
-            <th>Date Start</th><th>Finish</th><th>PIC</th><th>Maint. Type</th>
-            ${gHasSec?'<th>Section</th>':''}
-            <th>Findings</th><th>Parts</th><th>Status</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>`;
-  }).join('');
-
-  contentEl.innerHTML=`
-    <div class="block">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--bor);margin-bottom:0;">
-        <h3 style="margin:0;padding:0;border:none;">📊 Service Frequency</h3>
-        <span style="font-size:11px;color:var(--tx2);">${Object.keys(freqMap).length} equipment</span>
-      </div>
-      ${rptDeptChips(rptFreqDept,'setFreqDept')}
-      <div class="rpt-freq-scroll" style="overflow-x:auto;border:1px solid var(--bor);border-radius:8px;margin-top:8px;">
-        <table class="rpt-table">
-          <thead><tr><th>Equipment</th><th>Department</th><th>Count</th><th>Frequency</th></tr></thead>
-          <tbody>${freqRows||'<tr><td colspan="4" style="text-align:center;color:var(--tx2);padding:20px;">No data</td></tr>'}</tbody>
-        </table>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;letter-spacing:1px;text-transform:uppercase;">📋 Service History</div>
-      <span style="font-size:11px;color:var(--tx2);">${histRecs.length} records</span>
-    </div>
-    ${rptDeptChips(rptHistDept,'setHistDept')}
-    <div style="margin-top:10px;">${historyHTML||'<div class="empty"><div class="ei">📋</div><h4>No records.</h4></div>'}</div>`;
+  const grouped={};histRecs.forEach(r=>{const base=getEquipBaseName(r.equipment)||r.equipment||'Unknown';if(!grouped[base])grouped[base]=[];grouped[base].push(r);});
+  const historyHTML=Object.entries(grouped).map(([base,rs])=>{const dn=rs[0]?.dept||'';const doneCount=rs.filter(r=>r.status==='completed').length;const rows=rs.map(r=>{const parts=(r.parts||'').split(',').map(p=>p.trim()).filter(Boolean);const ptags=parts.map(p=>`<span class="ptag" style="font-size:10px;">${esc(p)}</span>`).join(' ');const secBadge=sectionBadge(r.equipment);return`<tr><td>${fdd(r.dateStart)}</td><td>${r.dateFinish?fdd(r.dateFinish):'<span style="color:var(--tx2);">—</span>'}</td><td>${esc(r.pic)}</td><td>${esc(r.maintenanceType)}</td><td>${secBadge}</td><td style="max-width:180px;font-size:12px;">${esc(r.details)}</td><td style="max-width:140px;">${ptags||'<span style="color:var(--tx2);font-size:11px;">—</span>'}</td><td><span class="sbadge ${r.status==='completed'?'s-ok">✅ Done':'s-wip">🔄 WIP'}</span></td></tr>`;}).join('');return`<div class="rpt-equip-block"><div class="rpt-equip-hdr"><div><div class="rpt-equip-name">${esc(base)}</div><div style="margin-top:4px;"><span class="dept-tag" style="font-size:10px;">${deptIcon(dn)} ${esc(dn)}</span></div></div><div style="text-align:right;"><div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--acc);">${rs.length}x</div><div style="font-size:11px;color:var(--tx2);">${doneCount} done · ${rs.length-doneCount} WIP</div></div></div><div style="overflow-x:auto;"><table class="rpt-table"><thead><tr><th>Date Start</th><th>Finish</th><th>PIC</th><th>Maint. Type</th><th>Section</th><th>Findings</th><th>Parts</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;}).join('');
+  contentEl.innerHTML=`<div class="block"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--bor);margin-bottom:0;"><h3 style="margin:0;padding:0;border:none;">📊 Service Frequency</h3><span style="font-size:11px;color:var(--tx2);">${Object.keys(freqMap).length} equipment</span></div>${rptDeptChips(rptFreqDept,'setFreqDept')}<div class="rpt-freq-scroll" style="overflow-x:auto;border:1px solid var(--bor);border-radius:8px;margin-top:8px;"><table class="rpt-table"><thead><tr><th>Equipment</th><th>Department</th><th>Count</th><th>Frequency</th></tr></thead><tbody>${freqRows||'<tr><td colspan="4" style="text-align:center;color:var(--tx2);padding:20px;">No data</td></tr>'}</tbody></table></div></div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;"><div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;letter-spacing:1px;text-transform:uppercase;">📋 Service History</div><span style="font-size:11px;color:var(--tx2);">${histRecs.length} records</span></div>${rptDeptChips(rptHistDept,'setHistDept')}<div style="margin-top:10px;">${historyHTML||'<div class="empty"><div class="ei">📋</div><h4>No records.</h4></div>'}</div>`;
 }
 
 /* ══════════════════════════════════════════
@@ -1744,15 +1598,10 @@ async function saveChangePwd(){
 /* ══════════════════════════════════════════
    PM STATUS ENGINE
 ══════════════════════════════════════════ */
-function pmIsSlotDone(moldId,wkNum){
-  // Derive current fiscal year dynamically from CURRENT_WK
-  // WK600s = FY26, WK700s = FY27, WK800s = FY28 …
-  const curFY2d=Math.floor((CURRENT_WK-600)/100)+26;
-  return pmHistory.some(h=>h.moldId===moldId&&h.scheduledWkNum===wkNum&&h.fiscalYear===curFY2d);
-}
+function pmIsSlotDone(moldId,wkNum){return pmHistory.some(h=>h.moldId===moldId&&h.scheduledWkNum===wkNum&&h.fiscalYear===ACTIVE_FY2);}
 function pmGetMoldStatus(m){
   const sw=m.scheduledWeeks||[];if(!sw.length)return{label:"NOT SET",color:"#6B7280",bg:"#6B728018",slots:[]};
-  const slots=sw.map(wkNum=>{const fwk=600+wkNum,done=pmIsSlotDone(m.id,wkNum);let slotStatus;if(done)slotStatus="DONE";else if(fwk<CURRENT_WK)slotStatus="OVERDUE";else if(fwk===CURRENT_WK)slotStatus="DUE NOW";else if(fwk===CURRENT_WK+1)slotStatus="DUE SOON";else slotStatus="UPCOMING";return{wkNum,fwk,done,slotStatus};});
+  const slots=sw.map(wkNum=>{const fwk=(ACTIVE_FY2-20)*100+wkNum,done=pmIsSlotDone(m.id,wkNum);let slotStatus;if(done)slotStatus="DONE";else if(fwk<CURRENT_WK)slotStatus="OVERDUE";else if(fwk===CURRENT_WK)slotStatus="DUE NOW";else if(fwk===CURRENT_WK+1)slotStatus="DUE SOON";else slotStatus="UPCOMING";return{wkNum,fwk,done,slotStatus};});
   const overdue=slots.filter(s=>s.slotStatus==="OVERDUE"),dueNow=slots.filter(s=>s.slotStatus==="DUE NOW"),dueSoon=slots.filter(s=>s.slotStatus==="DUE SOON");
   if(overdue.length>0)return{label:"OVERDUE",color:"#FF3B30",bg:"#FF3B3018",slots,overdue};if(dueNow.length>0)return{label:"DUE NOW",color:"#FF9500",bg:"#FF950018",slots,dueNow};if(dueSoon.length>0)return{label:"DUE SOON",color:"#FFCC00",bg:"#FFCC0018",slots,dueSoon};
   return{label:"OK",color:"#30D158",bg:"#30D15818",slots};
@@ -1808,38 +1657,20 @@ function pmFullMoldRow(m){
    PM CALENDAR
 ══════════════════════════════════════════ */
 function renderPMCalendar(){
-  // Auto-select current quarter on first load
-  if(!pmActiveQtr){
-    const curWkObj=getWk(CURRENT_WK);
-    pmActiveQtr=curWkObj?curWkObj.qtr:'2Q26';
-  }
-  // Show ALL fiscal year quarters (FY26 Q1–Q4, FY27 Q1–Q4, …)
-  const allQtrs=[...new Set(CALENDAR.map(w=>w.qtr))];
-  document.getElementById('pm-qtr-tabs').innerHTML=allQtrs.map(q=>{
-    // Add FY separator labels before each new fiscal year
-    const isNewFY=allQtrs.indexOf(q)>0&&q.startsWith('1Q');
-    const sep=isNewFY?`<span style="color:var(--tx2);font-size:11px;padding:0 4px;align-self:center;">|</span>`:'';
-    return sep+`<button onclick="pmSetQtr('${q}')" class="qtr-btn${pmActiveQtr===q?' active':''}">${q}</button>`;
-  }).join('');
+  // FY label update
+  const lbl=document.getElementById('pm-fy-label');
+  if(lbl)lbl.textContent='FY'+ACTIVE_FY_FULL;
+  // FY year picker
+  const curFY=detectActiveFY();
+  const fyOpts=[curFY-1,curFY,curFY+1];
+  const fyPicker=document.getElementById('pm-fy-picker');
+  if(fyPicker)fyPicker.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;"><span style="color:var(--tx2);font-size:11px;font-weight:700;letter-spacing:1px;">FISCAL YEAR</span>${fyOpts.map(fy=>`<button onclick="switchFY(${fy})" style="padding:4px 16px;border-radius:20px;border:1.5px solid ${ACTIVE_FY_FULL===fy?'var(--pm-acc)':'var(--bd)'};background:${ACTIVE_FY_FULL===fy?'var(--pm-acc)':'transparent'};color:${ACTIVE_FY_FULL===fy?'#fff':'var(--tx2)'};font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">FY${fy}</button>`).join('')}</div>`;
+  // Quarter tabs — reset if switching FY
+  if(!pmActiveQtr||!CALENDAR.some(w=>w.qtr===pmActiveQtr))pmActiveQtr=CALENDAR[0].qtr;
+  const qtrs=[...new Set(CALENDAR.map(w=>w.qtr))];
+  document.getElementById('pm-qtr-tabs').innerHTML=qtrs.map(q=>`<button onclick="pmSetQtr('${q}')" class="qtr-btn${pmActiveQtr===q?' active':''}">${q}</button>`).join('');
   const qtrWeeks=CALENDAR.filter(w=>w.qtr===pmActiveQtr),months=[...new Set(qtrWeeks.map(w=>w.mth))];
-  document.getElementById('pm-calendar-content').innerHTML=months.map(mth=>{
-    const mthWeeks=qtrWeeks.filter(w=>w.mth===mth);
-    return`<div style="margin-bottom:22px;"><div style="color:var(--tx2);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${mth}</div><div style="display:grid;gap:8px;">${mthWeeks.map(w=>{
-      const scheduled=pmMolds.filter(m=>(m.scheduledWeeks||[]).includes(w.wkNum));
-      const isCur=w.wk===CURRENT_WK;
-      const badges=scheduled.length?scheduled.map(m=>{
-        const done=pmIsSlotDone(m.id,w.wkNum);
-        // Compare full week code (not wkNum alone) for colour logic
-        let color='#9CA3AF';
-        if(done)color='#30D158';
-        else if(w.wk<CURRENT_WK)color='#FF3B30';
-        else if(w.wk===CURRENT_WK)color='#FF9500';
-        else if(w.wk===CURRENT_WK+1)color='#FFCC00';
-        return`<span style="background:${color}18;color:${color};font-size:11px;font-weight:600;padding:2px 8px;border-radius:16px;border:1px solid ${color}44;font-family:'DM Mono',monospace;white-space:nowrap;">${esc(m.name)}${done?' ✓':''}</span>`;
-      }).join(''):`<span style="color:var(--tx2);font-size:12px;">No PM scheduled</span>`;
-      return`<div class="pm-cal-week${isCur?' current-wk':''}"><div style="text-align:center;min-width:50px;"><div style="color:${isCur?'var(--pm-acc)':'var(--tx2)'};font-size:10px;font-weight:700;letter-spacing:1px;">WK${w.wk}</div><div style="color:${isCur?'var(--pm-acc)':'var(--tx)'};font-size:18px;font-weight:900;font-family:'Barlow Condensed',monospace;line-height:1.1;">Wk${w.wkNum}</div>${isCur?`<div style="color:var(--pm-acc);font-size:9px;font-weight:700;letter-spacing:1px;">NOW</div>`:''}</div><div style="flex:1;min-width:0;"><div style="color:var(--tx2);font-size:11px;margin-bottom:6px;">Sun ${w.sunD} – Sat ${w.satD} · ${w.period}</div><div style="display:flex;gap:4px;flex-wrap:wrap;">${badges}</div></div></div>`;
-    }).join('')}</div></div>`;
-  }).join('');
+  document.getElementById('pm-calendar-content').innerHTML=months.map(mth=>{const mthWeeks=qtrWeeks.filter(w=>w.mth===mth);return`<div style="margin-bottom:22px;"><div style="color:var(--tx2);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">${mth}</div><div style="display:grid;gap:8px;">${mthWeeks.map(w=>{const scheduled=pmMolds.filter(m=>(m.scheduledWeeks||[]).includes(w.wkNum));const isCur=w.wk===CURRENT_WK;const badges=scheduled.length?scheduled.map(m=>{const done=pmIsSlotDone(m.id,w.wkNum);const fwk=(ACTIVE_FY2-20)*100+w.wkNum;let color='#9CA3AF';if(done)color='#30D158';else if(fwk<CURRENT_WK)color='#FF3B30';else if(fwk===CURRENT_WK)color='#FF9500';else if(fwk===CURRENT_WK+1)color='#FFCC00';return`<span style="background:${color}18;color:${color};font-size:11px;font-weight:600;padding:2px 8px;border-radius:16px;border:1px solid ${color}44;font-family:'DM Mono',monospace;white-space:nowrap;">${esc(m.name)}${done?' ✓':''}</span>`;}).join(''):`<span style="color:var(--tx2);font-size:12px;">No PM scheduled</span>`;return`<div class="pm-cal-week${isCur?' current-wk':''}"><div style="text-align:center;min-width:50px;"><div style="color:${isCur?'var(--pm-acc)':'var(--tx2)'};font-size:10px;font-weight:700;letter-spacing:1px;">WK${w.wk}</div><div style="color:${isCur?'var(--pm-acc)':'var(--tx)'};font-size:18px;font-weight:900;font-family:'Barlow Condensed',monospace;line-height:1.1;">Wk${w.wkNum}</div>${isCur?`<div style="color:var(--pm-acc);font-size:9px;font-weight:700;letter-spacing:1px;">NOW</div>`:''}</div><div style="flex:1;min-width:0;"><div style="color:var(--tx2);font-size:11px;margin-bottom:6px;">Sun ${w.sun} – Sat ${w.sat} · ${w.period}</div><div style="display:flex;gap:4px;flex-wrap:wrap;">${badges}</div></div></div>`;}).join('')}</div></div>`;}).join('');
 }
 function pmSetQtr(q){pmActiveQtr=q;renderPMCalendar();}
 
@@ -1904,8 +1735,8 @@ async function pmConfirmDone(){
   const dateVal=document.getElementById('pmDoneDate').value,person=document.getElementById('pmDonePerson').value,notes=document.getElementById('pmDoneNotes').value.trim(),wkNumVal=parseInt(document.getElementById('pmDoneSchedWk').value);
   if(!dateVal){toast('⚠️ Please enter the PM date.');return;}if(!person){toast('⚠️ Please select a technician.');return;}if(!wkNumVal){toast('⚠️ Please select the scheduled week.');return;}
   const btn=document.getElementById('pmDoneConfirmBtn');btn.textContent='Saving...';btn.disabled=true;
-  const histEntry={moldId:id,moldName:m.name,moldGroup:m.group||'',scheduledWkNum:wkNumVal,fiscalYear:26,fiscalWeek:600+wkNumVal,doneDate:dateVal,doneBy:person||'—',notes:notes||'',recordedAt:new Date().toLocaleDateString('en-MY'),source:'manual'};
-  const r=await pmAtomicCall('pmAppendHistory',{hMoldId:String(id),hMoldName:m.name,hMoldGroup:m.group||'',hSchedWkNum:String(wkNumVal),hFiscalYear:'26',hFiscalWeek:String(600+wkNumVal),hDoneDate:dateVal,hDoneBy:person||'',hNotes:notes||'',hRecordedAt:new Date().toLocaleDateString('en-MY'),hSource:'manual'});
+  const histEntry={moldId:id,moldName:m.name,moldGroup:m.group||'',scheduledWkNum:wkNumVal,fiscalYear:ACTIVE_FY2,fiscalWeek:(ACTIVE_FY2-20)*100+wkNumVal,doneDate:dateVal,doneBy:person||'—',notes:notes||'',recordedAt:new Date().toLocaleDateString('en-MY'),source:'manual'};
+  const r=await pmAtomicCall('pmAppendHistory',{hMoldId:String(id),hMoldName:m.name,hMoldGroup:m.group||'',hSchedWkNum:String(wkNumVal),hFiscalYear:String(ACTIVE_FY2),hFiscalWeek:String((ACTIVE_FY2-20)*100+wkNumVal),hDoneDate:dateVal,hDoneBy:person||'',hNotes:notes||'',hRecordedAt:new Date().toLocaleDateString('en-MY'),hSource:'manual'});
   if(r&&r.status==='ok')pmHistory.push(histEntry);btn.textContent='✅ Confirm Done';btn.disabled=false;closeMod('pmDoneMod');renderPMDashboard();renderPMMolds();renderPMHistory();if(r&&r.status==='ok')toast('✅ PM marked done & saved to Google Sheets!');
 }
 
