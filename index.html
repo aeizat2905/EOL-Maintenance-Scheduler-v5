@@ -1,118 +1,3 @@
-/* ══════════════════════════════════════════
-   FISCAL CALENDAR — AUTO-GENERATED PER FY
-   Fiscal year = first Sunday of NOV (prev year) through last Saturday 52 weeks later.
-   Thursday is the mid-week anchor for labelling each week's month/quarter.
-══════════════════════════════════════════ */
-
-const MONTH_NAMES=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-const PERIOD_MAP={NOV:'P1',DEC:'P2',JAN:'P3',FEB:'P4',MAR:'P5',APR:'P6',MAY:'P7',JUN:'P8',JUL:'P9',AUG:'P10',SEP:'P11',OCT:'P12'};
-const QUARTER_MAP={NOV:'1Q',DEC:'1Q',JAN:'1Q',FEB:'2Q',MAR:'2Q',APR:'2Q',MAY:'3Q',JUN:'3Q',JUL:'3Q',AUG:'4Q',SEP:'4Q',OCT:'4Q'};
-const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
-
-/** First Sunday of November in (fyFullYear - 1). */
-function fyFirstSunday(fyFullYear){
-  const d=new Date(fyFullYear-1,10,1);
-  while(d.getDay()!==0)d.setDate(d.getDate()+1);
-  return d;
-}
-
-/** Build a 52-week fiscal calendar for fyFullYear (e.g. 2026). */
-function buildFiscalCalendar(fyFullYear){
-  const fy2=fyFullYear%100;
-  const wkPrefix=(fy2-20)*100; // FY26→600, FY27→700 …
-  const start=fyFirstSunday(fyFullYear);
-  const DAY=86400000;
-  const weeks=[];
-  for(let wkNum=1;wkNum<=52;wkNum++){
-    const sunMs=start.getTime()+(wkNum-1)*7*DAY;
-    const sun=new Date(sunMs);
-    const thu=new Date(sunMs+4*DAY);
-    const sat=new Date(sunMs+6*DAY);
-    const mthName=MONTH_NAMES[thu.getMonth()];
-    weeks.push({
-      wk:wkPrefix+wkNum, wkNum, fyFull:fyFullYear, fy2,
-      qtr:QUARTER_MAP[mthName]+fy2, mth:mthName, period:PERIOD_MAP[mthName],
-      sun:sun.getDate(), mon:new Date(sunMs+DAY).getDate(),
-      tue:new Date(sunMs+2*DAY).getDate(), wed:new Date(sunMs+3*DAY).getDate(),
-      thu:thu.getDate(), fri:new Date(sunMs+5*DAY).getDate(), sat:sat.getDate(),
-      _sunDate:sun, _satDate:sat
-    });
-  }
-  return weeks;
-}
-
-/** Detect which FY today (MYT) belongs to. */
-function detectActiveFY(){
-  const now=new Date();
-  const myt=new Date(now.getTime()+(8*60*60*1000));
-  const today=new Date(myt.getUTCFullYear(),myt.getUTCMonth(),myt.getUTCDate());
-  for(let fy=today.getFullYear()-1;fy<=today.getFullYear()+1;fy++){
-    const s=fyFirstSunday(fy);
-    const e=new Date(s.getTime()+52*7*86400000-1);
-    if(today>=s&&today<=e)return fy;
-  }
-  return today.getFullYear();
-}
-
-const _calCache={};
-function getCalendar(fyFullYear){
-  if(!_calCache[fyFullYear])_calCache[fyFullYear]=buildFiscalCalendar(fyFullYear);
-  return _calCache[fyFullYear];
-}
-
-/* Active FY — auto-detected; user can switch via FY picker in PM Calendar. */
-let ACTIVE_FY_FULL=detectActiveFY();
-let ACTIVE_FY2=ACTIVE_FY_FULL%100;
-let CALENDAR=getCalendar(ACTIVE_FY_FULL);
-
-function switchFY(fyFullYear){
-  ACTIVE_FY_FULL=fyFullYear;
-  ACTIVE_FY2=fyFullYear%100;
-  CALENDAR=getCalendar(fyFullYear);
-  CURRENT_WK=detectCurrentWeek();
-  pmActiveQtr=CALENDAR[0].qtr;
-  const lbl=document.getElementById('pm-fy-label');
-  if(lbl)lbl.textContent='FY'+fyFullYear;
-  renderPMCalendar();
-}
-
-/* ══════════════════════════════════════════
-   FISCAL WEEK DATE RESOLUTION
-══════════════════════════════════════════ */
-
-function resolveWeekBounds(w){
-  const sunD=w._sunDate,satD=w._satDate;
-  return{
-    sunYr:sunD.getFullYear(),sunMo:sunD.getMonth(),sunD:sunD.getDate(),
-    satYr:satD.getFullYear(),satMo:satD.getMonth(),satD:satD.getDate()
-  };
-}
-
-function dateInWeek(y,m,d,w){
-  const b=resolveWeekBounds(w);
-  const afterSun=(y>b.sunYr)||(y===b.sunYr&&m>b.sunMo)||(y===b.sunYr&&m===b.sunMo&&d>=b.sunD);
-  const beforeSat=(y<b.satYr)||(y===b.satYr&&m<b.satMo)||(y===b.satYr&&m===b.satMo&&d<=b.satD);
-  return afterSun&&beforeSat;
-}
-
-function detectCurrentWeek(){
-  const now=new Date();
-  const myt=new Date(now.getTime()+(8*60*60*1000));
-  const y=myt.getUTCFullYear(),m=myt.getUTCMonth(),d=myt.getUTCDate();
-  for(const w of CALENDAR){if(dateInWeek(y,m,d,w))return w.wk;}
-  return CALENDAR[CALENDAR.length-1].wk;
-}
-
-function dateToFiscalWeek(dateStr){
-  if(!dateStr)return null;
-  const parts=dateStr.split('-');
-  if(parts.length<3)return null;
-  const y=parseInt(parts[0]),m=parseInt(parts[1])-1,d=parseInt(parts[2]);
-  for(const w of CALENDAR){if(dateInWeek(y,m,d,w))return w.wk;}
-  return null;
-}
-
-let CURRENT_WK=detectCurrentWeek();
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -612,6 +497,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--tx);min-he
       <div class="sec-hdr"><div class="sec-t">PM <span class="pm">Calendar</span> — <span id="pm-fy-label">FY2026</span></div></div>
       <div id="pm-fy-picker" style="margin-bottom:8px;"></div>
       <div id="pm-fy-picker" style="margin-bottom:8px;"></div>
+      <div id="pm-fy-picker" style="margin-bottom:8px;"></div>
       <div id="pm-qtr-tabs" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;"></div>
       <div id="pm-calendar-content"></div>
     </div>
@@ -783,7 +669,7 @@ let selectedActivity=null,editSelectedActivity=null;
 let selectedPresses=[],editSelectedPresses=[];
 let dashActiveFilter={},dashOpenState={},manageOpenState={};
 let pmAddWeekState=[],pmEditWeekState=[];
-let pmActiveFilter='all',pmActiveQtr=CALENDAR[0].qtr,pmDoneMoldId=null;
+let pmActiveFilter='all',pmActiveQtr='',pmDoneMoldId=null;
 let pmActiveSec='pm-dashboard';
 let rptFreqDept='',rptHistDept='';
 let pmIsSaving=false;
@@ -818,114 +704,95 @@ const PM_SCHED_SEEDS={
 };
 
 /* ══════════════════════════════════════════
-   FISCAL CALENDAR FY2026
+   FISCAL CALENDAR — AUTO-GENERATED PER FY
+   Fiscal year = first Sunday of NOV (prev year) through last Saturday 52 weeks later.
+   Thursday is the mid-week anchor for labelling each week's month/quarter.
 ══════════════════════════════════════════ */
-const CALENDAR=[
-  {wk:601,wkNum:1, qtr:"1Q26",mth:"NOV",period:"P1", sun:2, mon:3, tue:4, wed:5, thu:6, fri:7, sat:8},
-  {wk:602,wkNum:2, qtr:"1Q26",mth:"NOV",period:"P1", sun:9, mon:10,tue:11,wed:12,thu:13,fri:14,sat:15},
-  {wk:603,wkNum:3, qtr:"1Q26",mth:"NOV",period:"P1", sun:16,mon:17,tue:18,wed:19,thu:20,fri:21,sat:22},
-  {wk:604,wkNum:4, qtr:"1Q26",mth:"NOV",period:"P1", sun:23,mon:24,tue:25,wed:26,thu:27,fri:28,sat:29},
-  {wk:605,wkNum:5, qtr:"1Q26",mth:"DEC",period:"P2", sun:30,mon:1, tue:2, wed:3, thu:4, fri:5, sat:6},
-  {wk:606,wkNum:6, qtr:"1Q26",mth:"DEC",period:"P2", sun:7, mon:8, tue:9, wed:10,thu:11,fri:12,sat:13},
-  {wk:607,wkNum:7, qtr:"1Q26",mth:"DEC",period:"P2", sun:14,mon:15,tue:16,wed:17,thu:18,fri:19,sat:20},
-  {wk:608,wkNum:8, qtr:"1Q26",mth:"DEC",period:"P2", sun:21,mon:22,tue:23,wed:24,thu:25,fri:26,sat:27},
-  {wk:609,wkNum:9, qtr:"1Q26",mth:"JAN",period:"P3", sun:28,mon:29,tue:30,wed:31,thu:1, fri:2, sat:3},
-  {wk:610,wkNum:10,qtr:"1Q26",mth:"JAN",period:"P3", sun:4, mon:5, tue:6, wed:7, thu:8, fri:9, sat:10},
-  {wk:611,wkNum:11,qtr:"1Q26",mth:"JAN",period:"P3", sun:11,mon:12,tue:13,wed:14,thu:15,fri:16,sat:17},
-  {wk:612,wkNum:12,qtr:"1Q26",mth:"JAN",period:"P3", sun:18,mon:19,tue:20,wed:21,thu:22,fri:23,sat:24},
-  {wk:613,wkNum:13,qtr:"1Q26",mth:"JAN",period:"P3", sun:25,mon:26,tue:27,wed:28,thu:29,fri:30,sat:31},
-  {wk:614,wkNum:14,qtr:"2Q26",mth:"FEB",period:"P4", sun:1, mon:2, tue:3, wed:4, thu:5, fri:6, sat:7},
-  {wk:615,wkNum:15,qtr:"2Q26",mth:"FEB",period:"P4", sun:8, mon:9, tue:10,wed:11,thu:12,fri:13,sat:14},
-  {wk:616,wkNum:16,qtr:"2Q26",mth:"FEB",period:"P4", sun:15,mon:16,tue:17,wed:18,thu:19,fri:20,sat:21},
-  {wk:617,wkNum:17,qtr:"2Q26",mth:"FEB",period:"P4", sun:22,mon:23,tue:24,wed:25,thu:26,fri:27,sat:28},
-  {wk:618,wkNum:18,qtr:"2Q26",mth:"MAR",period:"P5", sun:1, mon:2, tue:3, wed:4, thu:5, fri:6, sat:7},
-  {wk:619,wkNum:19,qtr:"2Q26",mth:"MAR",period:"P5", sun:8, mon:9, tue:10,wed:11,thu:12,fri:13,sat:14},
-  {wk:620,wkNum:20,qtr:"2Q26",mth:"MAR",period:"P5", sun:15,mon:16,tue:17,wed:18,thu:19,fri:20,sat:21},
-  {wk:621,wkNum:21,qtr:"2Q26",mth:"MAR",period:"P5", sun:22,mon:23,tue:24,wed:25,thu:26,fri:27,sat:28},
-  {wk:622,wkNum:22,qtr:"2Q26",mth:"APR",period:"P6", sun:29,mon:30,tue:31,wed:1, thu:2, fri:3, sat:4},
-  {wk:623,wkNum:23,qtr:"2Q26",mth:"APR",period:"P6", sun:5, mon:6, tue:7, wed:8, thu:9, fri:10,sat:11},
-  {wk:624,wkNum:24,qtr:"2Q26",mth:"APR",period:"P6", sun:12,mon:13,tue:14,wed:15,thu:16,fri:17,sat:18},
-  {wk:625,wkNum:25,qtr:"2Q26",mth:"APR",period:"P6", sun:19,mon:20,tue:21,wed:22,thu:23,fri:24,sat:25},
-  {wk:626,wkNum:26,qtr:"2Q26",mth:"APR",period:"P6", sun:26,mon:27,tue:28,wed:29,thu:30,fri:1, sat:2},
-  {wk:627,wkNum:27,qtr:"3Q26",mth:"MAY",period:"P7", sun:3, mon:4, tue:5, wed:6, thu:7, fri:8, sat:9},
-  {wk:628,wkNum:28,qtr:"3Q26",mth:"MAY",period:"P7", sun:10,mon:11,tue:12,wed:13,thu:14,fri:15,sat:16},
-  {wk:629,wkNum:29,qtr:"3Q26",mth:"MAY",period:"P7", sun:17,mon:18,tue:19,wed:20,thu:21,fri:22,sat:23},
-  {wk:630,wkNum:30,qtr:"3Q26",mth:"MAY",period:"P7", sun:24,mon:25,tue:26,wed:27,thu:28,fri:29,sat:30},
-  {wk:631,wkNum:31,qtr:"3Q26",mth:"JUN",period:"P8", sun:31,mon:1, tue:2, wed:3, thu:4, fri:5, sat:6},
-  {wk:632,wkNum:32,qtr:"3Q26",mth:"JUN",period:"P8", sun:7, mon:8, tue:9, wed:10,thu:11,fri:12,sat:13},
-  {wk:633,wkNum:33,qtr:"3Q26",mth:"JUN",period:"P8", sun:14,mon:15,tue:16,wed:17,thu:18,fri:19,sat:20},
-  {wk:634,wkNum:34,qtr:"3Q26",mth:"JUN",period:"P8", sun:21,mon:22,tue:23,wed:24,thu:25,fri:26,sat:27},
-  {wk:635,wkNum:35,qtr:"3Q26",mth:"JUL",period:"P9", sun:28,mon:29,tue:30,wed:1, thu:2, fri:3, sat:4},
-  {wk:636,wkNum:36,qtr:"3Q26",mth:"JUL",period:"P9", sun:5, mon:6, tue:7, wed:8, thu:9, fri:10,sat:11},
-  {wk:637,wkNum:37,qtr:"3Q26",mth:"JUL",period:"P9", sun:12,mon:13,tue:14,wed:15,thu:16,fri:17,sat:18},
-  {wk:638,wkNum:38,qtr:"3Q26",mth:"JUL",period:"P9", sun:19,mon:20,tue:21,wed:22,thu:23,fri:24,sat:25},
-  {wk:639,wkNum:39,qtr:"3Q26",mth:"JUL",period:"P9", sun:26,mon:27,tue:28,wed:29,thu:30,fri:31,sat:1},
-  {wk:640,wkNum:40,qtr:"4Q26",mth:"AUG",period:"P10",sun:2, mon:3, tue:4, wed:5, thu:6, fri:7, sat:8},
-  {wk:641,wkNum:41,qtr:"4Q26",mth:"AUG",period:"P10",sun:9, mon:10,tue:11,wed:12,thu:13,fri:14,sat:15},
-  {wk:642,wkNum:42,qtr:"4Q26",mth:"AUG",period:"P10",sun:16,mon:17,tue:18,wed:19,thu:20,fri:21,sat:22},
-  {wk:643,wkNum:43,qtr:"4Q26",mth:"AUG",period:"P10",sun:23,mon:24,tue:25,wed:26,thu:27,fri:28,sat:29},
-  {wk:644,wkNum:44,qtr:"4Q26",mth:"SEP",period:"P11",sun:30,mon:31,tue:1, wed:2, thu:3, fri:4, sat:5},
-  {wk:645,wkNum:45,qtr:"4Q26",mth:"SEP",period:"P11",sun:6, mon:7, tue:8, wed:9, thu:10,fri:11,sat:12},
-  {wk:646,wkNum:46,qtr:"4Q26",mth:"SEP",period:"P11",sun:13,mon:14,tue:15,wed:16,thu:17,fri:18,sat:19},
-  {wk:647,wkNum:47,qtr:"4Q26",mth:"SEP",period:"P11",sun:20,mon:21,tue:22,wed:23,thu:24,fri:25,sat:26},
-  {wk:648,wkNum:48,qtr:"4Q26",mth:"OCT",period:"P12",sun:27,mon:28,tue:29,wed:30,thu:1, fri:2, sat:3},
-  {wk:649,wkNum:49,qtr:"4Q26",mth:"OCT",period:"P12",sun:4, mon:5, tue:6, wed:7, thu:8, fri:9, sat:10},
-  {wk:650,wkNum:50,qtr:"4Q26",mth:"OCT",period:"P12",sun:11,mon:12,tue:13,wed:14,thu:15,fri:16,sat:17},
-  {wk:651,wkNum:51,qtr:"4Q26",mth:"OCT",period:"P12",sun:18,mon:19,tue:20,wed:21,thu:22,fri:23,sat:24},
-  {wk:652,wkNum:52,qtr:"4Q26",mth:"OCT",period:"P12",sun:25,mon:26,tue:27,wed:28,thu:29,fri:30,sat:31},
-];
+
+const MONTH_NAMES=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const PERIOD_MAP={NOV:'P1',DEC:'P2',JAN:'P3',FEB:'P4',MAR:'P5',APR:'P6',MAY:'P7',JUN:'P8',JUL:'P9',AUG:'P10',SEP:'P11',OCT:'P12'};
+const QUARTER_MAP={NOV:'1Q',DEC:'1Q',JAN:'1Q',FEB:'2Q',MAR:'2Q',APR:'2Q',MAY:'3Q',JUN:'3Q',JUL:'3Q',AUG:'4Q',SEP:'4Q',OCT:'4Q'};
+const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+
+/** First Sunday of November in (fyFullYear - 1). */
+function fyFirstSunday(fyFullYear){
+  const d=new Date(fyFullYear-1,10,1);
+  while(d.getDay()!==0)d.setDate(d.getDate()+1);
+  return d;
+}
+
+/** Build a 52-week fiscal calendar for fyFullYear (e.g. 2026). */
+function buildFiscalCalendar(fyFullYear){
+  const fy2=fyFullYear%100;
+  const wkPrefix=(fy2-20)*100; // FY26→600, FY27→700 …
+  const start=fyFirstSunday(fyFullYear);
+  const DAY=86400000;
+  const weeks=[];
+  for(let wkNum=1;wkNum<=52;wkNum++){
+    const sunMs=start.getTime()+(wkNum-1)*7*DAY;
+    const sun=new Date(sunMs);
+    const thu=new Date(sunMs+4*DAY);
+    const sat=new Date(sunMs+6*DAY);
+    const mthName=MONTH_NAMES[thu.getMonth()];
+    weeks.push({
+      wk:wkPrefix+wkNum, wkNum, fyFull:fyFullYear, fy2,
+      qtr:QUARTER_MAP[mthName]+fy2, mth:mthName, period:PERIOD_MAP[mthName],
+      sun:sun.getDate(), mon:new Date(sunMs+DAY).getDate(),
+      tue:new Date(sunMs+2*DAY).getDate(), wed:new Date(sunMs+3*DAY).getDate(),
+      thu:thu.getDate(), fri:new Date(sunMs+5*DAY).getDate(), sat:sat.getDate(),
+      _sunDate:sun, _satDate:sat
+    });
+  }
+  return weeks;
+}
+
+/** Detect which FY today (MYT) belongs to. */
+function detectActiveFY(){
+  const now=new Date();
+  const myt=new Date(now.getTime()+(8*60*60*1000));
+  const today=new Date(myt.getUTCFullYear(),myt.getUTCMonth(),myt.getUTCDate());
+  for(let fy=today.getFullYear()-1;fy<=today.getFullYear()+1;fy++){
+    const s=fyFirstSunday(fy);
+    const e=new Date(s.getTime()+52*7*86400000-1);
+    if(today>=s&&today<=e)return fy;
+  }
+  return today.getFullYear();
+}
+
+const _calCache={};
+function getCalendar(fyFullYear){
+  if(!_calCache[fyFullYear])_calCache[fyFullYear]=buildFiscalCalendar(fyFullYear);
+  return _calCache[fyFullYear];
+}
+
+/* Active FY — auto-detected; user can switch via FY picker in PM Calendar. */
+let ACTIVE_FY_FULL=detectActiveFY();
+let ACTIVE_FY2=ACTIVE_FY_FULL%100;
+let CALENDAR=getCalendar(ACTIVE_FY_FULL);
+
+function switchFY(fyFullYear){
+  ACTIVE_FY_FULL=fyFullYear;
+  ACTIVE_FY2=fyFullYear%100;
+  CALENDAR=getCalendar(fyFullYear);
+  CURRENT_WK=detectCurrentWeek();
+  pmActiveQtr=CALENDAR[0].qtr;
+  const lbl=document.getElementById('pm-fy-label');
+  if(lbl)lbl.textContent='FY'+fyFullYear;
+  renderPMCalendar();
+}
 
 /* ══════════════════════════════════════════
    FISCAL WEEK DATE RESOLUTION
-   ─────────────────────────────────────────
-   The calendar stores day-of-month numbers
-   for each weekday. The key insight:
-
-   For weeks where sun > sat (e.g. WK622
-   sun=29, sat=4), the Sunday belongs to
-   the PREVIOUS month and Saturday belongs
-   to the LABELLED month (mth).
-
-   For weeks where sun <= sat, all days
-   are within the LABELLED month.
-
-   We resolve actual calendar dates by:
-     • If sun <= sat  → sunMth = mth, satMth = mth
-     • If sun >  sat  → sunMth = mth - 1, satMth = mth
-
-   FY2026 fiscal year: NOV/DEC are 2025,
-   everything else is 2026.
 ══════════════════════════════════════════ */
 
-const MI={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
-function calBaseYear(mth){return(mth==='NOV'||mth==='DEC')?2025:2026;}
-
-/**
- * Resolve the actual [year, month(0-indexed), day] for Sunday and Saturday
- * of a calendar week entry.
- */
 function resolveWeekBounds(w){
-  const baseMo=MI[w.mth];
-  const baseYr=calBaseYear(w.mth);
-  let sunMo=baseMo,sunYr=baseYr,satMo=baseMo,satYr=baseYr;
-  if(w.sun>w.sat){
-    // Week crosses a month boundary. thu tells which side overflows:
-    //   thu < 8  => sun/mon/tue are in PREV month (sun-overflow, e.g. WK622 MAR29-APR4 thu=2)
-    //   thu >= 8 => fri/sat spill into NEXT month (sat-overflow, e.g. WK626 APR26-MAY2 thu=30)
-    if(w.thu<8){
-      sunMo=baseMo-1;
-      if(sunMo<0){sunMo=11;sunYr=baseYr-1;}
-    }else{
-      satMo=baseMo+1;
-      if(satMo>11){satMo=0;satYr=baseYr+1;}
-    }
-  }
-  return{sunYr,sunMo,sunD:w.sun,satYr,satMo,satD:w.sat};
+  const sunD=w._sunDate,satD=w._satDate;
+  return{
+    sunYr:sunD.getFullYear(),sunMo:sunD.getMonth(),sunD:sunD.getDate(),
+    satYr:satD.getFullYear(),satMo:satD.getMonth(),satD:satD.getDate()
+  };
 }
 
-/**
- * Check if a given date (y,m,d) falls on or after Sun and on or before Sat.
- */
 function dateInWeek(y,m,d,w){
   const b=resolveWeekBounds(w);
   const afterSun=(y>b.sunYr)||(y===b.sunYr&&m>b.sunMo)||(y===b.sunYr&&m===b.sunMo&&d>=b.sunD);
@@ -934,15 +801,10 @@ function dateInWeek(y,m,d,w){
 }
 
 function detectCurrentWeek(){
-  // Use Malaysia time (UTC+8)
   const now=new Date();
   const myt=new Date(now.getTime()+(8*60*60*1000));
   const y=myt.getUTCFullYear(),m=myt.getUTCMonth(),d=myt.getUTCDate();
-
-  for(const w of CALENDAR){
-    if(dateInWeek(y,m,d,w))return w.wk;
-  }
-  // Fallback: return last week
+  for(const w of CALENDAR){if(dateInWeek(y,m,d,w))return w.wk;}
   return CALENDAR[CALENDAR.length-1].wk;
 }
 
@@ -951,14 +813,14 @@ function dateToFiscalWeek(dateStr){
   const parts=dateStr.split('-');
   if(parts.length<3)return null;
   const y=parseInt(parts[0]),m=parseInt(parts[1])-1,d=parseInt(parts[2]);
-  for(const w of CALENDAR){
-    if(dateInWeek(y,m,d,w))return w.wk;
-  }
+  for(const w of CALENDAR){if(dateInWeek(y,m,d,w))return w.wk;}
   return null;
 }
 
+let CURRENT_WK=detectCurrentWeek();
 
-const CURRENT_WKNUM=CURRENT_WK-600;
+
+const CURRENT_WKNUM=(CURRENT_WK-(ACTIVE_FY2-20)*100);
 function getWk(fwk){return CALENDAR.find(w=>w.wk===fwk);}
 
 const PM_VALID_TYPES=['Quarterly Maintenance','Half-Yearly Maintenance'];
